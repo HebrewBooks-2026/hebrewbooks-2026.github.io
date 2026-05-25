@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מערכת עזרה — ארון הספרים הדיגיטלי</title>
+<meta name="description" content="מדריך השימוש המלא לתוכנת HebrewBooks — ארון הספרים הדיגיטלי: חיפוש מתקדם, צופה PDF, קיצורי מקשים ועוד.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#15233f; --navy2:#1e3357; --indigo:#2b4a8b;
+    --gold:#caa24a; --gold-soft:#e7c876;
+    --parch:#f7f3ea; --ink:#22293a; --muted:#6a7180;
+    --card:#ffffff; --line:#e7ddc7; --code-bg:#f1ece0;
+    --shadow:0 8px 28px rgba(21,35,63,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Heebo',-apple-system,'Segoe UI',Arial,sans-serif;color:var(--ink);background:var(--parch);line-height:1.7}
+  .serif{font-family:'Frank Ruhl Libre','Heebo',serif}
+  a{color:var(--indigo)}
+
+  /* header */
+  header{background:linear-gradient(160deg,var(--navy),var(--navy2));color:#f3eede;padding:22px 0}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+  .head-row{display:flex;align-items:center;gap:13px}
+  .logo{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;font-size:1.4rem;box-shadow:0 6px 16px rgba(202,162,74,.4)}
+  header h1{font-size:1.5rem;font-weight:800}
+  header .sub{opacity:.8;font-size:.95rem}
+  header a.home{margin-inline-start:auto;color:var(--gold-soft);font-weight:600;border:1px solid rgba(231,200,118,.4);padding:7px 14px;border-radius:10px}
+  header a.home:hover{background:rgba(231,200,118,.12)}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:30px;align-items:start;padding:30px 0 60px}
+  @media(max-width:820px){.layout{grid-template-columns:1fr}}
+  nav.toc{position:sticky;top:18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;box-shadow:var(--shadow)}
+  @media(max-width:820px){nav.toc{position:static}}
+  nav.toc h2{font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:10px}
+  nav.toc a{display:block;color:var(--ink);text-decoration:none;font-size:.95rem;padding:6px 8px;border-radius:8px}
+  nav.toc a:hover{background:var(--parch);color:var(--indigo)}
+
+  main{min-width:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px 28px;margin-bottom:20px;box-shadow:var(--shadow);scroll-margin-top:16px}
+  .card h2{font-size:1.5rem;font-weight:800;color:var(--navy);margin-bottom:14px}
+  .card h3{font-size:1.12rem;font-weight:700;color:var(--indigo);margin:18px 0 6px}
+  .card h3:first-of-type{margin-top:4px}
+  .card p{margin-bottom:10px;color:#2b3142}
+  .card p.quote{font-style:italic;color:var(--muted);border-inline-start:3px solid var(--gold);padding-inline-start:14px}
+  ul.feat{list-style:none;margin:6px 0 4px}
+  ul.feat li{position:relative;padding:6px 26px 6px 0;}
+  ul.feat li::before{content:"✦";color:var(--gold);position:absolute;inset-inline-start:0;top:6px}
+  code{font-family:'Cascadia Code',Consolas,monospace;background:var(--code-bg);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:.9em;direction:ltr;unicode-bidi:isolate;display:inline-block}
+  pre{font-family:'Cascadia Code',Consolas,monospace;background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:8px 0 12px;font-size:.92rem;line-height:2;white-space:pre-wrap;overflow-x:auto}
+  .contact a{font-size:1.15rem;font-weight:700}
+  footer{text-align:center;color:var(--muted);font-size:.85rem;padding:10px 0 40px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap head-row">
+    <span class="logo serif">ס</span>
+    <div>
+      <h1 class="serif">מערכת עזרה</h1>
+      <div class="sub">ארון הספרים הדיגיטלי — HebrewBooks</div>
+    </div>
+    <a class="home" href="index.html">דף הבית ←</a>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <h2>תוכן</h2>
+    <a href="#about">אודות hebrewbooks.org</a>
+    <a href="#new">גרסה חדשה</a>
+    <a href="#guide">מדריך שימוש</a>
+    <a href="#advanced">חיפוש מתקדם</a>
+    <a href="#keys">קיצורי מקשים</a>
+    <a href="#more">תכונות נוספות</a>
+    <a href="#themes">פלטות צבעים</a>
+    <a href="#bug">דיווח על תקלה</a>
+    <a href="#contact">צור קשר</a>
+  </nav>
+
+  <main>
+    <section class="card" id="about">
+      <h2>אודות hebrewbooks.org</h2>
+      <p>מפעל Hebrewbooks.org במתכונתו המקורית נוסד במטרה לשמר את הספרים והחיבורים התורניים שיצאו לאור ברחבי ארה"ב בשנים עברו, ואינם זמינים כיום להדפסה ו/או להפצה. רבנים רבים תושבי ארה"ב חיברו ספרים וחיבורים שונים בשנים המוקדמות של המאה העשרים, אך במהלך השנים שחלפו מאז פטירתם, נשכחו אף חיבוריהם פרי עבודתם הקדושה.</p>
+      <p>נכון להיום, הרחבנו את תחום הפעילות, מטרתנו כיום היא להכיל במסגרת זו את כל ספרי הקודש שהודפסו במהלך השנים. ב-Hebrewbooks.org תוכלו לצפות ואף להדפיס את הספר בשלמותו באופן מקוון.</p>
+      <p>אילו הייתם שואלים כל רב ומחבר ספר, מהי משאלתו החשובה ביותר, תשובתו ללא ספק היתה: ברצוני שאנשים ילמדו ויהגו בספרי, ואף לאחר פטירתי. ואכן, אנו מוצאים מחברים רבים שכתבו לשון זה בהקדמת ספרם: 'כתבתי ספר זה, ואקוה שהדברים הכתובים בספר זה ילמדו אף לאחר פטירתי, על מנת שיהיו שפתותי דובבות בקבר'. כאשר הנכם מצטטים אמרה או דבר תורה מספרים אלו, זכרו נא להזכיר את שם המחבר, כך תהיינה שפתותיהם של המחברים דובבות בקבר, ובכך תחיו את זכרו של המחבר.</p>
+      <p class="quote">כפי שלמדונו רבותינו זכרונם לברכה (אבות ו, ו): 'כל האומר דבר בשם אומרו, מביא גאולה לעולם'.</p>
+      <p>Hebrewbooks.org הינו מפעל שלא למטרות רווח, מטרתנו הינה להחיות את זכרם של החיבורים הרבים שנכתבו במהלך השנים ולמרבה הצער נשתכחו ונזנחו, וכמו כן לעשות את עולם הספר התורני לדבר נגיש וזמין לכל דורש ללא תמורה.</p>
+    </section>
+
+    <section class="card" id="new">
+      <h2>ארון הספרים הדיגיטלי — גרסה חדשה</h2>
+      <p>זוהי גרסה חדשה ומשודרגת של תוכנת ארון הספרים הדיגיטלי, שנכתבה מחדש כדי להעניק חוויית קריאה וחיפוש מהירה ויציבה יותר. השינויים העיקריים:</p>
+      <ul class="feat">
+        <li><strong>מציג PDF פנימי משלנו</strong> — בנוי על Mozilla pdf.js, עם תמיכה בעברית RTL, סימון תוצאות חיפוש על העמוד, חיפוש בתוך הספר, רשימת עמודים, תמונות עמודים מוקטנות (thumbnails) ותוכן עניינים.</li>
+        <li><strong>חיפוש מהיר עם dtSearch</strong> — מנוע חיפוש מקצועי עם תמיכה בריבוי צורות מילים בעברית, ראשי תיבות, אותיות חיבור (דמשהוכלב), וקרבה.</li>
+        <li><strong>ניהול מדפים</strong> — אפשרות לסדר ספרים בקטגוריות משלכם.</li>
+        <li><strong>הורדת ספרים חדשים</strong> — סנכרון אוטומטי עם hebrewbooks.org להורדת ספרים שטרם הורדו.</li>
+        <li><strong>פלטות צבעים</strong> — מצב בהיר/כהה/לפי מערכת ההפעלה.</li>
+        <li><strong>עדכוני תוכנה אוטומטיים</strong> דרך Velopack.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="guide">
+      <h2>מדריך שימוש</h2>
+
+      <h3>קטלוג הספרים</h3>
+      <p>בלשונית "ספרייה" מוצגת רשימת כל הספרים שיש בכונן. לחיצה כפולה על ספר פותחת אותו במציג בצד שמאל. שורת החיפוש בראש הקטלוג מסננת לפי שם הספר או המחבר. ניתן לסנן גם לפי מדף (קטגוריה) דרך עץ הקטגוריות בצד.</p>
+
+      <h3>חיפוש בתוך הספרים</h3>
+      <p>בלשונית "חיפוש" אפשר לחפש מילים או צירופים בכל הספרים שבאינדקס. התוצאות מוצגות לפי ספר, עם מספר התאמות בכל ספר, ולחיצה כפולה פותחת את הספר עם הצגת הסימונים על העמוד.</p>
+
+      <h3>צופה ה-PDF</h3>
+      <p>סרגל הכלים העליון מאפשר ניווט בין עמודים, שינוי גודל, סיבוב, הדפסה (כפתור ⎙ — חלון הדפסה מלא, ראו להלן) ופתיחת הספר בתוכנת ברירת המחדל של המחשב. בצד ימין סרגל תמונות עמודים מוקטנות ותוכן עניינים. מקשי הצופה:</p>
+      <pre>←/→ — דף הבא / הקודם (סדר עברי)
+PageUp/PageDown · רווח — דף קודם / הבא
+Home/End — לעמוד הראשון / האחרון
+Ctrl++ / Ctrl+- — הגדל / הקטן · Ctrl+0 — גודל 100%
+F11 — מצב קריאה מורחב · Esc — יציאה ממצב מורחב</pre>
+      <p>קיצורי המקשים הגלובליים (חיפוש, מעבר בין תוצאות, מעבר בין מסכים) מרוכזים בכרטיס "קיצורי מקשים" למטה — והם פועלים גם כשהפוקוס בתוך הספר. חיפוש pdf.js הפנימי זמין מכפתור 🔍 בסרגל הצופה.</p>
+
+      <h3>ניהול מדפים</h3>
+      <p>אפשר לארגן ספרים בקטגוריות (מדפים) משלכם. בלשונית "ניהול מדפים" אפשר ליצור מדפים חדשים, להוסיף ספרים אליהם או להסיר אותם, ולמחוק מדפים שלא צריך.</p>
+
+      <h3>הורדת ספרים חדשים</h3>
+      <p>בלשונית "הורדת ספרים חדשים" אפשר להוריד ספרים שעדיין לא קיימים בקטלוג. התוכנה תיגש ל-hebrewbooks.org, תוריד את הספרים החסרים, ותוסיף אותם לקטלוג אוטומטית. בסוף ההורדה לוחצים על "עדכן אינדקס" כדי שהספרים החדשים יהיו ניתנים לחיפוש.</p>
+    </section>
+
+    <section class="card" id="advanced">
+      <h2>אפשרויות חיפוש מתקדם</h2>
+      <p>בלשונית "חיפוש", כפתור <strong>"בחר אפשרות ▾"</strong> פותח חלונית עם כל הרחבות החיפוש (סמנו V לְמה שתרצו). כל ההרחבות מצטרפות יחד — אפשר להפעיל כמה בו-זמנית. לעקיפה לכל מילה בנפרד: <code>=מילה</code> מבטל כל הרחבה למילה זו.</p>
+
+      <h3>אותיות חיבור (דמשהוכלב)</h3>
+      <p>כשהאופציה מופעלת, חיפוש "אריה" ימצא גם "באריה", "כאריה", "לאריה", "מאריה", "שאריה", "האריה", "ואריה", "דאריה" — כל המילים עם אותיות שימוש בתחילתן.<br>לסימון מפורש בתוך השאילתה: <code>+מילה</code> מחייב הרחבה גם כשהאופציה כבויה, ו-<code>=מילה</code> מבטל כל הרחבה למילה ספציפית.</p>
+
+      <h3>חיפוש שורש</h3>
+      <p>כשהאופציה מופעלת, כל מילה מורחבת אוטומטית לצורות נטויות וגזורות שלה (גזע + סיומות נפוצות + צורות לאחר הסרת אותיות שימוש), כך שחיפוש "ספרים" מוצא גם "ספר", "ספרי", "ספרות" וכו'. ההרחבה אלגוריתמית — מכסה את רוב הנטיות אך לא צורות חריגות.<br>לסימון מפורש בתוך השאילתה: <code>#מילה</code> מחייב הרחבת שורש למילה זו גם כשהאופציה כבויה (בדומה ל-<code>+מילה</code> של אותיות חיבור), ו-<code>=מילה</code> מבטל כל הרחבה.</p>
+
+      <h3>פתיחת ראשי תיבות</h3>
+      <p>הרחבה אוטומטית של ראשי תיבות נפוצים — למשל "אעג" יורחב גם ל-"אף על גב". רשימת הקיצורים נמצאת בקובץ RasheyTevot.DB.</p>
+
+      <h3>המרת זכר/נקבה במספרים</h3>
+      <p>מחליף בין צורות הזכר והנקבה של מספרים יסודיים — חיפוש "שלושה" ימצא גם "שלוש", ולהיפך. צורות מילה בלבד (בלי גימטריה). מכסה 1-10, עשרות 20-90, ו-100/200.</p>
+
+      <h3>המרת מספר ↔ גימטריה</h3>
+      <p>ממיר בין מספר מילולי לאות גימטריה בשני הכיוונים — חיפוש "שלושה" ימצא גם "ג"; חיפוש "ג'" ימצא גם "שלוש" וגם "שלושה" (לאות גימטריה אין מין, ולכן היא מתאימה לשתי הצורות).</p>
+
+      <h3>כתיב מלא/חסר</h3>
+      <p>מחליף אותיות ו׳/י׳ פנימיות בשני הכיוונים — חיפוש "תיקון" ימצא גם "תקון", וחיפוש "תקון" ימצא גם "תיקון". ההרחבה אלגוריתמית; לעיתים תתפוס מילה דומה (כמו גדול↔גדל), ולכן זו אפשרות נפרדת שמסמנים לפי הצורך.</p>
+
+      <h3>תרגום ארמית-עברית</h3>
+      <p>מרחיב מילים לפי מילון שקילות ארמית↔עברית, דו-כיווני — חיפוש "מלך" ימצא גם "מלכא", וחיפוש "מלכא" ימצא גם "מלך". המילון נטען מקובץ <code>App\HebAram.DB</code> שעל הכונן (ואפשר לערוך אותו).</p>
+
+      <h3>קרבה (Proximity)</h3>
+      <p>מספר המילים המקסימלי בין שתי מילות חיפוש. ברירת המחדל: 30. לחיפוש מדויק יותר אפשר להוריד ל-5 או 10.</p>
+
+      <h3>חיפוש מטושטש (Fuzziness)</h3>
+      <p>סובלנות לטעויות כתיב או הבדלי כתיב. 0 = חיפוש מדויק. 3-5 מתאים לרוב השימושים. 10 = רחב מאוד (כל מילה דומה).</p>
+
+      <h3>המילה הראשונה / האחרונה בספר</h3>
+      <p>בלשונית "חיפוש" יש שני כפתורים מעל תיבת החיפוש: <strong>▶</strong> מצרף עוגן לתחילת הספר, ו-<strong>◀</strong> מצרף עוגן לסוף הספר. לחיצה על הכפתור מוסיפה את הסימן בקצה השאילתה (▶ לפני, ◀ אחרי) ובהפעלת החיפוש הוא מתורגם אוטומטית ל-<code>xfirstword</code> או <code>xlastword</code> של dtSearch.</p>
+      <p>העוגנים שימושיים במיוחד עם <strong>פעולת קרבה</strong> (w/N): מילים שמופיעות בתחילת הספר (<strong>הקדמות, שערי ספרים, הסכמות</strong>) תמיד נמצאות "קרוב" למילה הראשונה — לכן <code>▶ מילה</code> עם מרחק מתאים מאתר את כל ההופעות באזור הזה. אותו דבר עם <strong>סיכומים, אחרית דבר ולוחות עזר</strong> בסוף הספר ביחס ל-◀.</p>
+      <pre>▶ רמב"ם — "רמב"ם" באזור תחילת הספר
+▶ הסכמת — אזכור הסכמה בתחילת הספר
+אמן ◀ — "אמן" באזור סוף הספר
+מפתח ◀ — מפתח עניינים בסוף הספר</pre>
+
+      <h3>סוגי שאילתות נוספים</h3>
+      <pre>תורה AND משה — שתי המילים באותו ספר
+תורה OR משה — אחת מהשתיים (לפחות אחת קיימת)
+תורה AND NOT משה — תורה ללא משה
+(תורה OR מצוות) AND אבות — סוגריים מקבצים תנאים
+משה AND (אהרן OR יהושע) — שילוב OR בתוך AND
+"משה רבינו" — מילים סמוכות, ללא מרחק ביניהן (גרשיים = ביטוי)
+משה* — כל מילה שמתחילה ב"משה" (משה, משלי, משה'לה...)</pre>
+    </section>
+
+    <section class="card" id="keys">
+      <h2>קיצורי מקשים</h2>
+      <p>הקיצורים הבאים פועלים מכל מקום בתוכנה — <strong>כולל כשהפוקוס בתוך הספר</strong> (גלילה/קריאה):</p>
+      <pre>Ctrl+↓ · Alt+→ — תוצאה הבאה בתוך הספר
+Ctrl+↑ · Alt+← — תוצאה קודמת בתוך הספר
+Ctrl+Shift+↓ — הספר הבא ברשימת התוצאות
+Ctrl+Shift+↑ — הספר הקודם ברשימת התוצאות
+Ctrl+F · F — מעבר לתיבת "חפש בספר זה"
+Ctrl+E · / — מעבר לתיבת החיפוש הראשית בעמוד
+Alt+C — מעבר ללשונית "חיפוש" (חיפוש בתוכן)
+Alt+K — מעבר ללשונית "ספרייה" (קטלוג)</pre>
+      <p>ההפרדה בין "תוצאה" ל"ספר" — <strong>תוצאה</strong> היא מופע מסומן בתוך הספר הפתוח (בPDF: עמוד עם hit; באוצריא: מילה מודגשת בטקסט). <strong>ספר</strong> הוא שורה ברשימת התוצאות של חיפוש בתוכן. כך אפשר לרפרף בין ההיטים של ספר אחד וגם לקפוץ לספר הבא בלי לעזוב את המקלדת.</p>
+      <p>בעת הקלדה בתוך תיבת טקסט, <code>F</code> ו-<code>/</code> הבודדים מקלידים כרגיל ואינם נחטפים (הצירופים עם Ctrl/Alt תמיד פעילים). חיפוש pdf.js הפנימי עבר מ-Ctrl+F לכפתור 🔍 שבסרגל הצופה.</p>
+    </section>
+
+    <section class="card" id="more">
+      <h2>תכונות נוספות</h2>
+
+      <h3>חיפוש בתוך הספר הפתוח</h3>
+      <p>אחרי שפותחים ספר (מהקטלוג או מתוצאת חיפוש), תיבת <strong>"חפש בספר זה"</strong> מאפשרת לחפש מונח חדש בתוך הספר הפתוח — עם אותן פונקציות כמו חיפוש רגיל (קרבה, אותיות חיבור, ראשי תיבות), רשימת עמודי תוצאה, וניווט ◀▶ בין ההופעות.</p>
+
+      <h3>היקף חיפוש וסימון ספרים</h3>
+      <p>בלשונית "חיפוש" אפשר לצמצם את היקף החיפוש ל-<strong>"רק המוצגים בקטלוג"</strong> או <strong>"רק המסומנים"</strong> — חוסך זמן ותוצאות מיותרות. בקטלוג מסמנים ספרים בעמודת הסימון, עם "בחר הכל" / "נקה הכל" / איפוס.</p>
+
+      <h3>סינון לפי מאגר ולפי נושא</h3>
+      <p>כאשר קיימים כמה מאגרים (HebrewBooks / אוצריא / מאגר אישי) אפשר לבחור באילו לחפש ולהציג (בחירה מרובה — כל צירוף). כפתור <strong>"נושאים"</strong> מאפשר לסנן את הקטלוג והתוצאות לפי נושא אחד או יותר.</p>
+
+      <h3>מצב קריאה מורחב</h3>
+      <p><code>F11</code> (או כפתור ההרחבה בסרגל) מסתיר את התפריטים ומגדיל את הספר לקריאה נוחה. <code>Esc</code> או <code>F11</code> שוב — יציאה.</p>
+
+      <h3>חלון צופה נפרד</h3>
+      <p>כפתור <strong>"חלון חדש"</strong> פותח ספר בחלון עצמאי משלו (אפשר כמה חלונות בו-זמנית, כל אחד עם חיפוש-בספר משלו).</p>
+
+      <h3>הדפסה</h3>
+      <p>כפתור ⎙ בסרגל הצופה פותח חלון הדפסה: בחירת מדפסת, מספר עותקים, טווח עמודים, כמה עמודים לגיליון (1/2/4/6/8/9), כיוון ההדפסה וסדר העמודים, עם תצוגה מקדימה — והדפסה ישירה למדפסת.</p>
+    </section>
+
+    <section class="card" id="themes">
+      <h2>פלטות צבעים</h2>
+      <p>בלשונית "הגדרות" תחת "מראה" אפשר לבחור מצב צבעים: לפי מערכת ההפעלה (ברירת מחדל), בהיר או כהה. השינוי מיידי ונשמר בין הפעלות.</p>
+    </section>
+
+    <section class="card" id="bug">
+      <h2>דיווח על תקלה</h2>
+      <p>מצאתם באג? בתוך התוכנה (מסך העזרה) הכפתור <strong>"שלח לוגים / דווח על תקלה"</strong> אוסף את קובצי הלוג האחרונים וסיכום סביבה ל-ZIP, פותח את תוכנת המייל עם הפרטים מוכנים, ומציג את קובץ ה-ZIP בסייר כדי שתצרפו אותו ותשלחו. הדיווח נשלח אל <a href="mailto:HebrewBooks2026@gmail.com">HebrewBooks2026@gmail.com</a>.</p>
+    </section>
+
+    <section class="card contact" id="contact">
+      <h2>צור קשר</h2>
+      <p>מצאתם באג? יש לכם שאלה או הצעה לשדרוג? נשמח לעזרה ולמשוב. אנא שלחו דוא"ל:</p>
+      <p><a href="mailto:HebrewBooks2026@gmail.com">HebrewBooks2026@gmail.com</a></p>
+    </section>
+
+    <footer>© 2026 The Society for Preservation of Hebrew Books</footer>
+  </main>
+</div>
+
+</body>
+</html>
