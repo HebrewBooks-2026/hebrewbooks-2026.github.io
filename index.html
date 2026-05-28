@@ -78,41 +78,90 @@
   .sub-dl{margin-top:14px;font-size:.92rem;opacity:.72}
   .sub-dl a{color:var(--amber);font-weight:600;border-bottom:1px dotted rgba(240,201,105,.5)}
 
-  /* Desktop-monitor mockup wrapping the real app screenshot — pure CSS, no extra image
-     assets. Three layers: (1) dark bezel around the screen, (2) a narrow neck/stand
-     under it, (3) a wider base below the neck. Subtle inset highlight on the bezel
-     edge sells the "physical monitor" feel without going skeuomorphic. */
-  .device{position:relative;display:flex;flex-direction:column;align-items:center}
+  /* Premium desktop-monitor mockup wrapping the real app screenshot — pure CSS, no
+     extra image assets. Five tricks combine to elevate it beyond a "frame around a PNG":
+     (1) a soft golden halo behind the screen to lift it off the hero gradient,
+     (2) a subtle 3D rotation on the Y/X axes that suggests the monitor is angled toward
+         the reader rather than dead-flat,
+     (3) a layered bezel with an inner highlight + outer ring for a metallic feel,
+     (4) a power LED on the bottom-right of the bezel (real-monitor cue),
+     (5) a tapered neck + wider base with realistic shadows. */
+  .device{
+    position:relative;display:flex;flex-direction:column;align-items:center;
+    perspective:2400px;perspective-origin:50% 45%;
+  }
+  /* Soft ambient halo behind the device — a warm gold-toned bloom that picks up the
+     hero accent colour, fades to nothing at the edges, and sits BEHIND the screen so
+     the screen visibly "lifts" off the dark hero. */
+  .device::before{
+    content:"";position:absolute;top:6%;left:-8%;right:-8%;bottom:-2%;
+    background:radial-gradient(ellipse at 50% 40%,
+      rgba(240,201,105,.22) 0%,
+      rgba(231,200,118,.10) 35%,
+      transparent 70%);
+    filter:blur(20px);z-index:0;pointer-events:none;
+  }
   .device .screen{
-    position:relative;width:100%;
-    background:#0a0d14;
-    padding:10px 10px 12px 10px;
-    border-radius:14px 14px 18px 18px;
+    position:relative;width:100%;z-index:1;
+    /* Layered bezel — outer rim slightly lighter than inner trough. */
+    background:
+      linear-gradient(180deg,#1f2632 0%,#0e1320 55%,#0a0e18 100%);
+    padding:14px 14px 18px 14px;
+    border-radius:16px 16px 22px 22px;
+    /* Subtle off-axis rotation — sells the "real device" depth without
+       making the screenshot hard to read. transform-origin biased toward
+       the bottom to mimic the natural pivot of a real monitor. */
+    transform:rotateY(-5deg) rotateX(2deg);
+    transform-origin:50% 70%;
+    transform-style:preserve-3d;
     box-shadow:
-      var(--shadow-lg),
-      inset 0 0 0 1px rgba(255,255,255,.06),
-      inset 0 1px 0 rgba(255,255,255,.10);
+      /* Heavy projected shadow behind the device. */
+      0 50px 90px -20px rgba(8,14,30,.55),
+      0 28px 60px rgba(0,0,0,.35),
+      /* Inner top-edge highlight (sells the bezel as physical material). */
+      inset 0 1px 0 rgba(255,255,255,.18),
+      /* Thin ring around the bezel. */
+      inset 0 0 0 1px rgba(255,255,255,.06);
   }
   .device .screen::before{
-    /* Tiny webcam-style dot at the top of the bezel — sells the monitor look. */
-    content:"";position:absolute;top:4px;left:50%;transform:translateX(-50%);
-    width:5px;height:5px;border-radius:50%;background:#2c333f;
+    /* Tiny webcam-style dot centred on the top bezel. */
+    content:"";position:absolute;top:5px;left:50%;transform:translateX(-50%);
+    width:6px;height:6px;border-radius:50%;
+    background:radial-gradient(circle,#3a4250 30%,#0a0e18 100%);
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
   }
-  .device .shot{display:block;width:100%;height:auto;border-radius:5px;background:#fff}
-  /* Neck — narrow vertical column below the bezel. */
-  .device .neck{
-    width:22%;height:16px;
-    background:linear-gradient(180deg,#1a2030 0%,#252c3c 100%);
-    border-left:1px solid rgba(0,0,0,.35);
-    border-right:1px solid rgba(0,0,0,.35);
+  .device .screen::after{
+    /* Power LED on the bottom-right of the bezel — a quiet amber glow. */
+    content:"";position:absolute;bottom:5px;right:14px;
+    width:5px;height:5px;border-radius:50%;background:var(--amber);
+    box-shadow:0 0 6px rgba(240,201,105,.85);
   }
-  /* Base — wider stand foot with a slight outward taper. */
+  .device .shot{
+    display:block;width:100%;height:auto;
+    border-radius:4px;background:#fff;
+    /* Subtle inner vignette — softens the harsh screenshot edges against the
+       black bezel and adds physical-screen depth. */
+    box-shadow:
+      inset 0 0 80px rgba(0,0,0,.08),
+      0 0 0 1px rgba(0,0,0,.25);
+  }
+  /* Neck — slightly tapered, with a centre highlight strip to suggest curvature. */
+  .device .neck{
+    width:14%;height:20px;z-index:1;
+    background:
+      linear-gradient(90deg,#0a0e18 0%,#2a3344 18%,#3a4458 50%,#2a3344 82%,#0a0e18 100%);
+    transform:rotateX(-3deg);transform-origin:50% 0;
+    box-shadow:0 -1px 0 rgba(0,0,0,.4) inset;
+  }
+  /* Base — wider foot with a soft contact shadow that grounds it. */
   .device .base{
-    width:46%;height:10px;
-    background:linear-gradient(180deg,#252c3c 0%,#10141d 100%);
-    border-radius:3px 3px 6px 6px;
-    box-shadow:0 18px 30px rgba(0,0,0,.35);
+    width:42%;height:14px;z-index:1;
+    background:
+      linear-gradient(180deg,#3a4458 0%,#1a2030 70%,#08101c 100%);
+    border-radius:5px 5px 18px 18px;
+    box-shadow:
+      0 30px 40px -10px rgba(0,0,0,.55),
+      inset 0 1px 0 rgba(255,255,255,.12);
   }
 
   .wave{position:absolute;left:0;right:0;bottom:-1px;line-height:0;z-index:1}
