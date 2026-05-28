@@ -78,14 +78,41 @@
   .sub-dl{margin-top:14px;font-size:.92rem;opacity:.72}
   .sub-dl a{color:var(--amber);font-weight:600;border-bottom:1px dotted rgba(240,201,105,.5)}
 
-  /* App screenshot — real capture from the running app, replaces the prior ASCII mockup.
-     Aspect-ratio preserved, soft shadow + rounded corners + subtle border to match the rest
-     of the hero. Loads lazily so it never blocks the LCP text. */
-  .shot{
-    display:block;width:100%;height:auto;border-radius:14px;
-    box-shadow:var(--shadow-lg);
-    border:1px solid rgba(255,255,255,.12);
-    background:#0e1830;
+  /* Desktop-monitor mockup wrapping the real app screenshot — pure CSS, no extra image
+     assets. Three layers: (1) dark bezel around the screen, (2) a narrow neck/stand
+     under it, (3) a wider base below the neck. Subtle inset highlight on the bezel
+     edge sells the "physical monitor" feel without going skeuomorphic. */
+  .device{position:relative;display:flex;flex-direction:column;align-items:center}
+  .device .screen{
+    position:relative;width:100%;
+    background:#0a0d14;
+    padding:10px 10px 12px 10px;
+    border-radius:14px 14px 18px 18px;
+    box-shadow:
+      var(--shadow-lg),
+      inset 0 0 0 1px rgba(255,255,255,.06),
+      inset 0 1px 0 rgba(255,255,255,.10);
+  }
+  .device .screen::before{
+    /* Tiny webcam-style dot at the top of the bezel — sells the monitor look. */
+    content:"";position:absolute;top:4px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:#2c333f;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .device .shot{display:block;width:100%;height:auto;border-radius:5px;background:#fff}
+  /* Neck — narrow vertical column below the bezel. */
+  .device .neck{
+    width:22%;height:16px;
+    background:linear-gradient(180deg,#1a2030 0%,#252c3c 100%);
+    border-left:1px solid rgba(0,0,0,.35);
+    border-right:1px solid rgba(0,0,0,.35);
+  }
+  /* Base — wider stand foot with a slight outward taper. */
+  .device .base{
+    width:46%;height:10px;
+    background:linear-gradient(180deg,#252c3c 0%,#10141d 100%);
+    border-radius:3px 3px 6px 6px;
+    box-shadow:0 18px 30px rgba(0,0,0,.35);
   }
 
   .wave{position:absolute;left:0;right:0;bottom:-1px;line-height:0;z-index:1}
@@ -194,8 +221,15 @@
       </div>
 
       <div class="hero-mock">
-        <img class="shot" src="img/screenshot.png" alt="צילום מסך של ארון הספרים הדיגיטלי — קטלוג עם רשימת ספרים, צופה PDF, וסרגל אזכור הפרויקט החינמי בתחתית"
-             loading="lazy" decoding="async" />
+        <div class="device" aria-label="צילום מסך של התוכנה במסגרת מסך מחשב">
+          <div class="screen">
+            <img class="shot" src="img/screenshot.png"
+                 alt="צילום מסך של ארון הספרים הדיגיטלי — קטלוג עם רשימת ספרים, צופה PDF, וסרגל הפרויקט החינמי בתחתית"
+                 loading="lazy" decoding="async" />
+          </div>
+          <div class="neck"></div>
+          <div class="base"></div>
+        </div>
       </div>
     </div>
   </div>
