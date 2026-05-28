@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HebrewBooks — ארון הספרים הדיגיטלי</title>
-<meta name="description" content="HebrewBooks — ספרייה תורנית דיגיטלית עם חיפוש טקסט מלא חכם בעברית, צופה PDF מובנה וקישורי מסורת הש״ס לחיצים. הורדה חינם לחלונות.">
+<meta name="description" content="HebrewBooks — ספרייה תורנית דיגיטלית עם חיפוש טקסט מלא חכם בעברית, צופה PDF מובנה, קישורי מסורת הש״ס לחיצים וקישורים אוטומטיים לשמות ספרים בקטלוג. הורדה חינם לחלונות.">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -78,22 +78,15 @@
   .sub-dl{margin-top:14px;font-size:.92rem;opacity:.72}
   .sub-dl a{color:var(--amber);font-weight:600;border-bottom:1px dotted rgba(240,201,105,.5)}
 
-  /* App mockup */
-  .mock{
-    position:relative;background:#0e1830;border-radius:18px;box-shadow:var(--shadow-lg);
-    border:1px solid rgba(255,255,255,.08);overflow:hidden;transform:rotate(-1.2deg)
+  /* App screenshot — real capture from the running app, replaces the prior ASCII mockup.
+     Aspect-ratio preserved, soft shadow + rounded corners + subtle border to match the rest
+     of the hero. Loads lazily so it never blocks the LCP text. */
+  .shot{
+    display:block;width:100%;height:auto;border-radius:14px;
+    box-shadow:var(--shadow-lg);
+    border:1px solid rgba(255,255,255,.12);
+    background:#0e1830;
   }
-  .mock .bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#0b1426;border-bottom:1px solid rgba(255,255,255,.06)}
-  .mock .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
-  .mock .bar i:nth-child(1){background:#ff5f57}.mock .bar i:nth-child(2){background:#febc2e}.mock .bar i:nth-child(3){background:#28c840}
-  .mock .bar span{margin-inline-start:auto;font-size:.78rem;color:#7e8aa6}
-  .mock .body{display:grid;grid-template-columns:1fr 150px;min-height:280px}
-  .mock .pg{padding:22px 20px;color:#cfd6e6;font-family:'Frank Ruhl Libre',serif;font-size:.82rem;line-height:2}
-  .mock .pg .hl{background:rgba(240,201,105,.32);border-radius:3px;padding:1px 3px}
-  .mock .pg .cite{color:#7fb0ff;border-bottom:1px solid #7fb0ff;cursor:pointer}
-  .mock .side{background:#0b1426;border-inline-start:1px solid rgba(255,255,255,.06);padding:16px 12px;color:#8893ad;font-size:.74rem}
-  .mock .side .row{padding:7px 8px;border-radius:7px;margin-bottom:4px}
-  .mock .side .row.act{background:rgba(202,162,74,.18);color:var(--amber)}
 
   .wave{position:absolute;left:0;right:0;bottom:-1px;line-height:0;z-index:1}
 
@@ -189,7 +182,7 @@
       <div class="hero-text">
         <span class="badge"><span class="dot"></span> גרסה <span id="ver">3.0.62</span> · חינמי · לחלונות</span>
         <h1 class="title serif">ארון הספרים <span class="accent">הדיגיטלי</span></h1>
-        <p class="lead">ספרייה תורנית שלמה על המחשב — עם חיפוש טקסט מלא חכם בעברית, צופה PDF מהיר, וקישורי <b>מסורת הש״ס</b> לחיצים שמדלגים ישר אל הדף המצוטט.</p>
+        <p class="lead">ספרייה תורנית שלמה על המחשב — עם חיפוש טקסט מלא חכם בעברית, צופה PDF מהיר, קישורי <b>מסורת הש״ס</b> לחיצים שמדלגים ישר אל הדף המצוטט, וקישורים אוטומטיים לכל אזכור של <b>שם ספר</b> בקטלוג.</p>
         <div class="cta">
           <a class="btn btn-gold" id="dlMain" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-stable-Setup.exe">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -200,27 +193,9 @@
         <p class="sub-dl">חבילה קומפקטית · מתעדכנת אוטומטית · גם <a href="#download">גרסה לא-מקוונת</a> ו<a href="#download">נייד (Portable)</a></p>
       </div>
 
-      <div class="hero-mock" aria-hidden="true">
-        <div class="mock">
-          <div class="bar"><i></i><i></i><i></i><span>ברכות · דף ב׳</span></div>
-          <div class="body">
-            <div class="pg serif">
-              תנו רבנן מאימתי קורין את <span class="hl">שמע</span> בערבית… וכדאיתא
-              <span class="cite">בשבת קיט.</span> ועיין <span class="cite">פסחים ב׳ ע״ב</span>
-              גבי בדיקת חמץ, והתם <span class="hl">מבואר</span> כשיטת רבא, וכן
-              <span class="cite">לקמן ד׳ ע״א</span> דרשו מקראי…
-            </div>
-            <div class="side">
-              <div class="row act">▸ פרק ראשון</div>
-              <div class="row">פרק שני</div>
-              <div class="row">פרק שלישי</div>
-              <div class="row">פרק רביעי</div>
-              <div class="row">— תוצאות —</div>
-              <div class="row">דף ב · 4</div>
-              <div class="row">דף ה · 2</div>
-            </div>
-          </div>
-        </div>
+      <div class="hero-mock">
+        <img class="shot" src="img/screenshot.png" alt="צילום מסך של ארון הספרים הדיגיטלי — קטלוג עם רשימת ספרים, צופה PDF, וסרגל אזכור הפרויקט החינמי בתחתית"
+             loading="lazy" decoding="async" />
       </div>
     </div>
   </div>
@@ -246,11 +221,16 @@
     <p class="sec-lead">כל הספרייה במקום אחד, עם מנוע חיפוש שמבין עברית ותלמוד — וניווט שמרגיש כמו דפדוף בש״ס.</p>
 
     <div class="features">
-      <div class="card feat-new">
-        <span class="tag-new">חדש</span>
+      <div class="card">
         <div class="ic">🔗</div>
         <h3>מסורת הש״ס לחיצה</h3>
         <p>כל ציון "ברכות י ע״ב", "לקמן ד׳" וכו׳ הופך לקישור — לחיצה פותחת את הגמרא בדיוק בדף המצוטט. <b>Ctrl+לחיצה</b> פותחת בחלון חדש כדי להשוות זה לצד זה.</p>
+      </div>
+      <div class="card feat-new">
+        <span class="tag-new">חדש</span>
+        <div class="ic">📚</div>
+        <h3>קישורים אוטומטיים לשמות ספרים</h3>
+        <p>אזכורים של ספרים מהקטלוג (<i>"עיין שלחן ערוך"</i>, <i>"בשו״ת חתם סופר"</i>) מסומנים אוטומטית בקו תחתון. לחיצה פותחת חלונית בחירה עם <b>כל המהדורות הזמינות</b> של הספר — מהדורות, חלקים, דפוסים שונים — ומשם פותחים את המהדורה הרצויה במציג.</p>
       </div>
       <div class="card">
         <div class="ic">🔍</div>
@@ -317,7 +297,7 @@
     <div class="steps">
       <div class="step"><div class="num"></div><h4>הורדה והרצה</h4><p>הורד את קובץ ההתקנה והרץ אותו. אם חלונות מציג אזהרת "SmartScreen" — לחץ "מידע נוסף" ואז "הפעל בכל זאת".</p></div>
       <div class="step"><div class="num"></div><h4>חיבור הספרייה</h4><p>חבר את הכונן עם הספרים. בהפעלה הראשונה התוכנה מזהה אותו אוטומטית (או שתבחר את התיקייה פעם אחת).</p></div>
-      <div class="step"><div class="num"></div><h4>ללמוד</h4><p>חפש, פתח ספר, ולחץ על קישורי מסורת הש״ס כדי לדלג בין הסוגיות. זהו — הספרייה כולה בידיך.</p></div>
+      <div class="step"><div class="num"></div><h4>ללמוד</h4><p>חפש, פתח ספר, ולחץ על קישורי מסורת הש״ס לדילוג בין סוגיות — או על שם ספר כדי לפתוח אותו ישר מהמראה-מקום. זהו — הספרייה כולה בידיך.</p></div>
     </div>
   </div>
 </section>
