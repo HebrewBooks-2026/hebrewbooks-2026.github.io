@@ -256,7 +256,7 @@
 
     <div class="hero-grid">
       <div class="hero-text">
-        <span class="badge"><span class="dot"></span> גרסה <span id="ver">3.0.62</span> · חינמי · לחלונות</span>
+        <span class="badge"><span class="dot"></span> גרסה <span id="ver">3.0.62</span> · חינמי · לחלונות<span id="dlCountBadge"></span></span>
         <h1 class="title serif">ארון הספרים <span class="accent">הדיגיטלי</span></h1>
         <p class="lead">ספרייה תורנית שלמה על המחשב — עם חיפוש טקסט מלא חכם בעברית, צופה PDF מהיר, קישורי <b>מסורת הש״ס</b> לחיצים שמדלגים ישר אל הדף המצוטט, וקישורים אוטומטיים לכל אזכור של <b>שם ספר</b> בקטלוג.</p>
         <div class="cta">
@@ -348,7 +348,7 @@
   <div class="wrap">
     <div class="eyebrow">הורדה</div>
     <h2 class="sec serif">בחר את הגרסה שמתאימה לך</h2>
-    <p class="sec-lead">שתי הגרסאות זהות בתכונות. ההבדל הוא רק באופן ההתקנה של סביבת ההרצה (.NET).</p>
+    <p class="sec-lead">שתי הגרסאות זהות בתכונות. ההבדל הוא רק באופן ההתקנה של סביבת ההרצה (.NET).<span id="dlCountLead"></span></p>
 
     <div class="dl-grid">
       <div class="dl-card rec">
@@ -369,6 +369,37 @@
 
     <p class="req">דרישות מערכת: <b>Windows 10 / 11</b> · הספרייה (קבצי ה-PDF) מסופקת בנפרד על כונן.
       &nbsp;·&nbsp; <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:600">כל הגרסאות ←</a></p>
+  </div>
+</section>
+
+<!-- Beta section — hidden by default; JS at the bottom of the page un-hides it ONLY when
+     the GitHub releases list has a pre-release. The two download links are populated at
+     runtime against the latest pre-release tag. Visually toned down vs the main download
+     card (warning amber, smaller buttons) so it doesn't compete for attention with stable. -->
+<section id="download-beta" style="background:#fbf5e8;border-top:1px solid #e7d8a8;border-bottom:1px solid #e7d8a8;display:none">
+  <div class="wrap">
+    <div class="eyebrow" style="color:#9a7400">בטא</div>
+    <h2 class="sec serif">גרסת בטא <span id="betaVer" style="opacity:0.55;font-size:0.6em;font-weight:400">—</span></h2>
+    <p class="sec-lead">פיצ'רים חדשים בבדיקה. <b>עלולים להיות באגים</b> — לא מומלץ לשימוש יומיומי.
+       בתוך התוכנה, ב-<i>הגדרות → עדכוני תוכנה</i>, סמן "קבל גרסאות בטא" כדי לקבל עדכוני בטא אוטומטית.</p>
+
+    <div class="dl-grid">
+      <div class="dl-card">
+        <h3>בטא רגילה</h3>
+        <p class="why">חבילה קטנה. דורש .NET 8 על המחשב (יורד אוטומטית בהתקנה).</p>
+        <a class="btn btn-gold" id="betaStableUrl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases?q=prerelease%3Atrue">⬇ התקנת בטא (Setup)</a>
+        <p class="alt">או <a id="betaStablePortableUrl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases?q=prerelease%3Atrue">גרסה ניידת (ZIP)</a></p>
+      </div>
+
+      <div class="dl-card">
+        <h3>בטא לא-מקוונת</h3>
+        <p class="why">כוללת בתוכה את כל הרכיבים — להתקנה ללא אינטרנט. קובץ גדול יותר.</p>
+        <a class="btn btn-dark" id="betaOfflineUrl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases?q=prerelease%3Atrue">⬇ בטא לא-מקוונת (Setup)</a>
+        <p class="alt">או <a id="betaOfflinePortableUrl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases?q=prerelease%3Atrue">גרסה ניידת (ZIP)</a></p>
+      </div>
+    </div>
+
+    <p class="req" style="opacity:0.75">לחזרה לגרסה רגילה: התקן מחדש את הגרסה הרגילה מלמעלה — הכפתור הקיים בהגדרות לא יוריד את גרסת הבטא, רק יפסיק לקבל בטא חדשות.</p>
   </div>
 </section>
 
@@ -396,9 +427,14 @@
 
 <script>
   // Keep the version badge live: read the latest release tag from GitHub (graceful fallback
-  // to the static value baked above if offline / rate-limited).
+  // to the static value baked above if offline / rate-limited). Same call also looks for
+  // the latest PRE-RELEASE in the list and, if found, populates + reveals the beta section.
   (function(){
-    fetch('https://api.github.com/repos/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest')
+    var REPO = 'HebrewBooks-2026/Hebrewbooks-Releases';
+    var DL = function(tag, name){ return 'https://github.com/'+REPO+'/releases/download/'+tag+'/'+name; };
+
+    // /releases/latest = newest NON-pre-release. Sets the stable version badges.
+    fetch('https://api.github.com/repos/'+REPO+'/releases/latest')
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(d){
         if(!d || !d.tag_name) return;
@@ -407,6 +443,59 @@
         document.querySelectorAll('.verF').forEach(function(e){ e.textContent = v; });
       })
       .catch(function(){ /* keep static fallback */ });
+
+    // /releases (full list) — used for two things in one fetch:
+    //   1. Find the newest PRE-RELEASE tag → fill in + reveal the beta section.
+    //   2. Sum download_count across every asset of every release → display the total
+    //      install/update count in the hero badge and download section.
+    // Filters: only USER-FACING installer/portable assets count toward the total —
+    // we drop the Velopack *.nupkg / RELEASES* / *.json files (those are per-update-
+    // check chatter, not real human installs) and the "prerequisites" release (cite.db
+    // etc. are polled on every launch, would inflate by ~10× the genuine number).
+    fetch('https://api.github.com/repos/'+REPO+'/releases?per_page=100')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(list){
+        if(!Array.isArray(list)) return;
+
+        // -- Beta detection --
+        var beta = null;
+        for (var i=0; i<list.length; i++){
+          if (list[i].prerelease && !list[i].draft) { beta = list[i]; break; }
+        }
+        if (beta) {
+          var tag = beta.tag_name;
+          document.getElementById('betaVer').textContent = String(tag).replace(/^v/i,'');
+          document.getElementById('betaStableUrl').href         = DL(tag, 'HebrewBooks-stable-Setup.exe');
+          document.getElementById('betaStablePortableUrl').href = DL(tag, 'HebrewBooks-stable-Portable.zip');
+          document.getElementById('betaOfflineUrl').href        = DL(tag, 'HebrewBooks-offline-Setup.exe');
+          document.getElementById('betaOfflinePortableUrl').href= DL(tag, 'HebrewBooks-offline-Portable.zip');
+          document.getElementById('download-beta').style.display = '';
+        }
+
+        // -- Download count --
+        // Only count things a HUMAN actually downloads from the site or the in-app
+        // installer. Drop Velopack delta/full nupkgs, RELEASES manifests, and the
+        // prerequisites release's data files. We accept some over-counting (a user
+        // who downloads Setup + Portable will count as 2) — the rough public number
+        // matters more than per-install accuracy.
+        var total = 0;
+        list.forEach(function(rel){
+          if (rel.tag_name === 'prerequisites') return;
+          if (!Array.isArray(rel.assets)) return;
+          rel.assets.forEach(function(a){
+            var n = a.name || '';
+            if (/\.(nupkg|json)$/i.test(n)) return;
+            if (/^RELEASES/.test(n)) return;
+            total += (a.download_count|0);
+          });
+        });
+        if (total > 0) {
+          var formatted = total.toLocaleString('he-IL');
+          document.getElementById('dlCountBadge').textContent = ' · ' + formatted + ' הורדות';
+          document.getElementById('dlCountLead').textContent  = ' · ' + formatted + ' הורדות עד היום';
+        }
+      })
+      .catch(function(){ /* beta + download count both silently absent on failure */ });
   })();
 </script>
 </body>
