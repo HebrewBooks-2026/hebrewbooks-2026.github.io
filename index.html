@@ -444,58 +444,77 @@
       })
       .catch(function(){ /* keep static fallback */ });
 
-    // /releases (full list) — used for two things in one fetch:
+    // /releases (full list) drives two things, combined with a tiny cumulative
+    // baseline file:
     //   1. Find the newest PRE-RELEASE tag → fill in + reveal the beta section.
-    //   2. Sum download_count across every asset of every release → display the total
-    //      install/update count in the hero badge and download section.
-    // Filters: only USER-FACING installer/portable assets count toward the total —
-    // we drop the Velopack *.nupkg / RELEASES* / *.json files (those are per-update-
-    // check chatter, not real human installs) and the "prerequisites" release (cite.db
-    // etc. are polled on every launch, would inflate by ~10× the genuine number).
-    fetch('https://api.github.com/repos/'+REPO+'/releases?per_page=100')
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(list){
-        if(!Array.isArray(list)) return;
+    //   2. Compute the public "downloads" number. It must stay LIVE (reflect a
+    //      brand-new download on the next page load) yet survive the remote
+    //      prune that deletes old releases — and with them GitHub's per-asset
+    //      counts, which is why summing only the live API once dropped the badge
+    //      to a fraction of the real total.
+    //
+    // The number = installs + most-downloaded single update. Each part splits
+    // into a FROZEN baseline (releases already pruned, counts can never change
+    // again — read from prerequisites/stats.json, written by publish.ps1) plus a
+    // LIVE part (releases still on GitHub, read straight from the API every
+    // load). Pruned and live releases are disjoint, so the two halves never
+    // double-count. If stats.json is missing we fall back to the live half
+    // alone, so the badge is never blank.
+    var STATS_URL = DL('prerequisites', 'stats.json');
+    Promise.all([
+      fetch(STATS_URL).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
+      fetch('https://api.github.com/repos/'+REPO+'/releases?per_page=100').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
+    ]).then(function(res){
+      var stats = res[0];            // { prunedInstalls, prunedUpdatesPeak } | null
+      var list  = res[1];            // [release, ...] | null
+      if (!Array.isArray(list)) return;
 
-        // -- Beta detection --
-        var beta = null;
-        for (var i=0; i<list.length; i++){
-          if (list[i].prerelease && !list[i].draft) { beta = list[i]; break; }
-        }
-        if (beta) {
-          var tag = beta.tag_name;
-          document.getElementById('betaVer').textContent = String(tag).replace(/^v/i,'');
-          document.getElementById('betaStableUrl').href         = DL(tag, 'HebrewBooks-stable-Setup.exe');
-          document.getElementById('betaStablePortableUrl').href = DL(tag, 'HebrewBooks-stable-Portable.zip');
-          document.getElementById('betaOfflineUrl').href        = DL(tag, 'HebrewBooks-offline-Setup.exe');
-          document.getElementById('betaOfflinePortableUrl').href= DL(tag, 'HebrewBooks-offline-Portable.zip');
-          document.getElementById('download-beta').style.display = '';
-        }
+      // -- Beta detection --
+      var beta = null;
+      for (var i=0; i<list.length; i++){
+        if (list[i].prerelease && !list[i].draft) { beta = list[i]; break; }
+      }
+      if (beta) {
+        var tag = beta.tag_name;
+        document.getElementById('betaVer').textContent = String(tag).replace(/^v/i,'');
+        document.getElementById('betaStableUrl').href         = DL(tag, 'HebrewBooks-stable-Setup.exe');
+        document.getElementById('betaStablePortableUrl').href = DL(tag, 'HebrewBooks-stable-Portable.zip');
+        document.getElementById('betaOfflineUrl').href        = DL(tag, 'HebrewBooks-offline-Setup.exe');
+        document.getElementById('betaOfflinePortableUrl').href= DL(tag, 'HebrewBooks-offline-Portable.zip');
+        document.getElementById('download-beta').style.display = '';
+      }
 
-        // -- Download count --
-        // Only count things a HUMAN actually downloads from the site or the in-app
-        // installer. Drop Velopack delta/full nupkgs, RELEASES manifests, and the
-        // prerequisites release's data files. We accept some over-counting (a user
-        // who downloads Setup + Portable will count as 2) — the rough public number
-        // matters more than per-install accuracy.
-        var total = 0;
-        list.forEach(function(rel){
-          if (rel.tag_name === 'prerequisites') return;
-          if (!Array.isArray(rel.assets)) return;
-          rel.assets.forEach(function(a){
-            var n = a.name || '';
-            if (/\.(nupkg|json)$/i.test(n)) return;
-            if (/^RELEASES/.test(n)) return;
-            total += (a.download_count|0);
-          });
+      // -- Live half: releases still on GitHub --
+      // installs = Setup.exe + Portable.zip downloads (a real human install).
+      // Per-release update total = that version's Velopack *.nupkg downloads,
+      // one per user who auto-updated to it; the single most-downloaded update
+      // ≈ the active user base (everyone pulls each update once), and installs
+      // adds fresh users an update has not yet counted. The asset classification
+      // MUST match publish.ps1's baseline so the frozen + live halves line up.
+      var liveInstalls = 0, livePeak = 0;
+      list.forEach(function(rel){
+        if (rel.tag_name === 'prerequisites') return;
+        if (!Array.isArray(rel.assets)) return;
+        var relUpd = 0;
+        rel.assets.forEach(function(a){
+          var n = a.name || '';
+          if (/\.nupkg$/i.test(n)) { relUpd += (a.download_count|0); return; }
+          if (/Setup\.exe$/i.test(n) || /Portable\.zip$/i.test(n)) { liveInstalls += (a.download_count|0); }
         });
-        if (total > 0) {
-          var formatted = total.toLocaleString('he-IL');
-          document.getElementById('dlCountBadge').textContent = ' · ' + formatted + ' הורדות';
-          document.getElementById('dlCountLead').textContent  = ' · ' + formatted + ' הורדות עד היום';
-        }
-      })
-      .catch(function(){ /* beta + download count both silently absent on failure */ });
+        if (relUpd > livePeak) livePeak = relUpd;
+      });
+
+      // -- Add the frozen baseline of already-pruned releases --
+      var baseInstalls = stats ? (stats.prunedInstalls|0)    : 0;
+      var basePeak     = stats ? (stats.prunedUpdatesPeak|0) : 0;
+      var users = (baseInstalls + liveInstalls) + Math.max(basePeak, livePeak);
+      if (users > 0) {
+        var formatted = users.toLocaleString('he-IL');
+        document.getElementById('dlCountBadge').textContent = ' · ' + formatted + ' הורדות';
+        document.getElementById('dlCountLead').textContent  = ' · ' + formatted + ' הורדות עד היום';
+      }
+    })
+    .catch(function(){ /* beta + download count both silently absent on failure */ });
   })();
 </script>
 </body>
