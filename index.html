@@ -460,7 +460,7 @@
     // load). Pruned and live releases are disjoint, so the two halves never
     // double-count. If stats.json is missing we fall back to the live half
     // alone, so the badge is never blank.
-    var STATS_URL = DL('prerequisites', 'stats.json');
+    var STATS_URL = 'stats.json';  // same-origin file (release-asset CORS is blocked by GitHub's new signed-URL asset host)
     Promise.all([
       fetch(STATS_URL).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
       fetch('https://api.github.com/repos/'+REPO+'/releases?per_page=100').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
