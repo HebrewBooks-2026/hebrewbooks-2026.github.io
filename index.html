@@ -170,9 +170,9 @@
   .stats{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin:-58px auto 0;position:relative;z-index:3;max-width:880px}
   .stat{
     flex:1;min-width:170px;background:var(--card);border:1px solid var(--line);
-    border-radius:16px;padding:22px;text-align:center;box-shadow:var(--shadow)
+    border-radius:16px;padding:22px 14px;text-align:center;box-shadow:var(--shadow)
   }
-  .stat .n{font-size:2rem;font-weight:900;color:var(--indigo);font-family:'Heebo'}
+  .stat .n{font-size:2rem;font-weight:900;color:var(--indigo);font-family:'Heebo';white-space:nowrap;text-align:center}
   .stat .l{color:var(--muted);font-weight:500;font-size:.95rem}
 
   /* ---------- Sections ---------- */
@@ -290,8 +290,8 @@
 
 <div class="wrap">
   <div class="stats">
-    <div class="stat"><div class="n" id="stBooks" dir="ltr">+60,000</div><div class="l">ספרים בספרייה</div></div>
-    <div class="stat"><div class="n" id="stLinks" dir="ltr">+10,000,000</div><div class="l">קישורים פנימיים</div></div>
+    <div class="stat"><div class="n" id="stBooks"><bdi>+60,000</bdi></div><div class="l">ספרים בספרייה</div></div>
+    <div class="stat"><div class="n" id="stLinks"><bdi>+10,000,000</bdi></div><div class="l">קישורים פנימיים</div></div>
     <div class="stat"><div class="n">עברית</div><div class="l">חיפוש מודע לשפה</div></div>
     <div class="stat"><div class="n">∞</div><div class="l">חינם לחלוטין</div></div>
   </div>
