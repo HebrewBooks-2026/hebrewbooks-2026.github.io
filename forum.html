@@ -316,6 +316,7 @@ let me = null;            // current user object or null
 let cats = [];            // categories
 let activeCat = null;     // selected category id (null = all)
 let curTopicId = null;
+let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -686,15 +687,19 @@ async function openTopic(id){
 }
 
 function renderPosts(posts){
+  curPosts = posts;
   $("posts").innerHTML = posts.map(p => {
     const roleTag = p.author_role && p.author_role !== "member"
       ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
+    const editedNote = p.edited_at
+      ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name) ? ` · נערך ע"י ${esc(p.editor_name)}` : " · נערך")
+      : "";
     const mine = me && me.id === p.user_id;
     let actions = "";
     if (mine || atLeast("moderator")){
       actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
     }
-    if (mine){
+    if (mine || atLeast("moderator")){
       actions = `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>` + actions;
     }
     // staff tools on OTHER users
@@ -708,7 +713,7 @@ function renderPosts(posts){
     return `<div class="post">
       <div class="post-head">
         <span class="who">${esc(p.author)}</span>${roleTag}
-        <span class="when">${when(p.created_at)}${p.edited_at?" · נערך":""}</span>
+        <span class="when">${when(p.created_at)}${editedNote}</span>
         ${staff?`<span class="staff-menu">${staff}</span>`:""}
       </div>
       <div class="post-body">${renderBody(p.body)}</div>
@@ -720,7 +725,7 @@ function renderPosts(posts){
     const act = el.getAttribute("data-act");
     const id = parseInt(el.getAttribute("data-id"),10);
     if (act === "del")   return deletePost(id);
-    if (act === "edit")  return editPost(id, el.closest(".post").querySelector(".post-body").textContent);
+    if (act === "edit")  return editPost(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
@@ -774,7 +779,9 @@ async function deletePost(id){
   try{ await api(`/posts/${id}`, { method:"DELETE" }); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
-async function editPost(id, current){
+async function editPost(id){
+  const post = curPosts.find(p => p.id === id);
+  const current = post ? post.body : "";
   const r = await openModal({ title:"עריכת הודעה",
     bodyHTML:`<textarea class="in" data-field="body" style="min-height:160px">${esc(current)}</textarea>`,
     okText:"שמור" });
