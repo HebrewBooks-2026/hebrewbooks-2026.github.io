@@ -108,6 +108,20 @@
   .back:hover{color:var(--ink)}
   .hidden{display:none!important}
   .signed-note{color:var(--muted);text-align:center;padding:22px;font-weight:600}
+
+  /* ---- modal dialog (replaces browser prompt/confirm) ---- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(21,35,63,.5);backdrop-filter:blur(2px);
+    display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal{background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(21,35,63,.4);
+    width:100%;max-width:460px;padding:24px;animation:pop .14s ease}
+  @keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal h2{font-size:1.3rem;font-weight:800;margin-bottom:14px}
+  .modal-body{margin-bottom:18px}
+  .modal-msg{font-size:1.05rem;color:var(--ink)}
+  .modal-sub{color:var(--muted);font-size:.88rem;margin-top:8px;line-height:1.5}
+  .modal-actions{display:flex;gap:10px}
+  .btn-danger-solid{background:var(--danger);color:#fff}
+  .btn-danger-solid:hover{background:#a83d27}
 </style>
 </head>
 <body>
@@ -185,6 +199,18 @@
   </section>
 </main>
 
+<!-- shared modal dialog -->
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody" class="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modalOk" class="btn btn-gold">אישור</button>
+      <button id="modalCancel" class="btn btn-light">ביטול</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ====== config ======
 const API = "https://hebrewbooks-forum-api.hebrewbooks.workers.dev";
@@ -217,6 +243,44 @@ function show(view){
   for (const v of ["viewList","viewTopic","viewNew"]) $(v).classList.toggle("hidden", v !== view);
   $("viewList").classList.toggle("layout", view === "viewList");
   window.scrollTo(0,0);
+}
+
+// ---- modal dialog: replaces browser prompt()/confirm() with styled in-page UI ----
+// openModal resolves to a {field:value} map on OK (empty {} if no fields), or null on cancel.
+function collectModal(){
+  const out = {};
+  $("modalBody").querySelectorAll("[data-field]").forEach(el => out[el.getAttribute("data-field")] = el.value);
+  return out;
+}
+function openModal({ title, bodyHTML = "", okText = "אישור", danger = false }){
+  return new Promise(resolve => {
+    $("modalTitle").textContent = title;
+    $("modalBody").innerHTML = bodyHTML;
+    const ok = $("modalOk"), cancel = $("modalCancel"), overlay = $("modalOverlay");
+    ok.textContent = okText;
+    ok.className = "btn " + (danger ? "btn-danger-solid" : "btn-gold");
+    overlay.classList.remove("hidden");
+    const field = $("modalBody").querySelector("input,textarea,select");
+    if (field) field.focus();
+    const prevKey = document.onkeydown;
+    function close(result){
+      overlay.classList.add("hidden");
+      ok.onclick = cancel.onclick = overlay.onclick = null;
+      document.onkeydown = prevKey;
+      resolve(result);
+    }
+    ok.onclick = () => close(collectModal());
+    cancel.onclick = () => close(null);
+    overlay.onclick = (e) => { if (e.target === overlay) close(null); };
+    document.onkeydown = (e) => {
+      if (e.key === "Escape") close(null);
+      else if (e.key === "Enter" && e.target.tagName === "INPUT"){ e.preventDefault(); close(collectModal()); }
+    };
+  });
+}
+function confirmDialog(title, message, okText = "אישור", danger = true){
+  return openModal({ title, bodyHTML: `<p class="modal-msg">${esc(message)}</p>`, okText, danger })
+    .then(r => r !== null);
 }
 
 async function api(path, opts){
@@ -367,7 +431,7 @@ function renderPosts(posts){
       staff += `<button class="btn btn-light btn-sm" data-act="block" data-uid="${p.user_id}" data-name="${esc(p.author)}">חסום</button>`;
     }
     if (atLeast("admin") && !mine){
-      staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}">תפקיד</button>`;
+      staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
     }
     return `<div class="post">
       <div class="post-head">
@@ -386,7 +450,7 @@ function renderPosts(posts){
     if (act === "del")   return deletePost(id);
     if (act === "edit")  return editPost(id, el.closest(".post").querySelector(".post-body").textContent);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
-    if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
+    if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
 }
 
@@ -412,13 +476,17 @@ async function submitReply(id){
   } catch(e){ flash(e.message, "err"); }
 }
 async function deletePost(id){
-  if (!confirm("למחוק את ההודעה?")) return;
+  if (!await confirmDialog("מחיקת הודעה", "למחוק את ההודעה?", "מחק")) return;
   try{ await api(`/posts/${id}`, { method:"DELETE" }); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
 async function editPost(id, current){
-  const body = prompt("עריכת הודעה:", current);
-  if (body === null) return;
+  const r = await openModal({ title:"עריכת הודעה",
+    bodyHTML:`<textarea class="in" data-field="body" style="min-height:160px">${esc(current)}</textarea>`,
+    okText:"שמור" });
+  if (!r) return;
+  const body = r.body.trim();
+  if (!body) return flash("ההודעה ריקה.", "err");
   try{ await api(`/posts/${id}`, { method:"PATCH", body:{ body }}); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
@@ -429,25 +497,33 @@ async function modLock(id, locked){
   catch(e){ flash(e.message, "err"); }
 }
 async function modDeleteTopic(id){
-  if (!confirm("למחוק את הנושא כולו?")) return;
+  if (!await confirmDialog("מחיקת נושא", "למחוק את הנושא כולו, כולל כל ההודעות שבו?", "מחק נושא")) return;
   try{ await api(`/topics/${id}`, { method:"DELETE" }); flash("הנושא נמחק.","ok"); backToList(); }
   catch(e){ flash(e.message, "err"); }
 }
 async function staffBlock(uid, name){
-  if (!confirm(`לחסום את ${name}? לא יוכל לכתוב יותר.`)) return;
+  if (!await confirmDialog("חסימת משתמש",
+      `לחסום את ${name}? הוא לא יוכל לכתוב יותר, וההתחברות הפעילה שלו תינתק מיד.`, "חסום")) return;
   try{ await api(`/users/${uid}/block`, { method:"PATCH", body:{ blocked:true }}); flash(`${name} נחסם.`,"ok"); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
-async function staffRole(uid, name){
-  const role = prompt(`תפקיד עבור ${name} (member / moderator / admin):`, "moderator");
-  if (!role) return;
-  try{ await api(`/users/${uid}/role`, { method:"PATCH", body:{ role:role.trim() }}); flash(`התפקיד של ${name} עודכן ל-${role}.`,"ok"); openTopic(curTopicId); }
+async function staffRole(uid, name, current){
+  const opts = [["member","חבר"],["moderator","מודרטור"],["admin","מנהל"]]
+    .map(([v,l]) => `<option value="${v}" ${v===current?"selected":""}>${l}</option>`).join("");
+  const r = await openModal({ title:`תפקיד עבור ${name}`,
+    bodyHTML:`<select class="in" data-field="role">${opts}</select>` +
+             `<p class="modal-sub">מודרטור: ניהול נושאים והודעות, חסימת משתמשים.<br>מנהל: + ניהול קטגוריות ותפקידים.</p>`,
+    okText:"עדכן תפקיד" });
+  if (!r) return;
+  try{ await api(`/users/${uid}/role`, { method:"PATCH", body:{ role:r.role }}); flash(`התפקיד של ${name} עודכן.`,"ok"); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
 async function addCategory(){
-  const name = prompt("שם הקטגוריה החדשה:");
-  if (!name) return;
-  try{ await api("/categories", { method:"POST", body:{ name }}); flash("הקטגוריה נוספה.","ok"); loadCategories(); }
+  const r = await openModal({ title:"קטגוריה חדשה",
+    bodyHTML:`<input class="in" data-field="name" maxlength="120" placeholder="שם הקטגוריה">`,
+    okText:"הוסף" });
+  if (!r || !r.name.trim()) return;
+  try{ await api("/categories", { method:"POST", body:{ name:r.name.trim() }}); flash("הקטגוריה נוספה.","ok"); loadCategories(); }
   catch(e){ flash(e.message, "err"); }
 }
 
