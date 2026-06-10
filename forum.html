@@ -297,6 +297,15 @@
   </div>
 </div>
 
+<!-- admin: manage all users -->
+<div id="usersOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:680px">
+    <h2>ניהול משתמשים</h2>
+    <div id="usersList" class="modal-body" style="max-height:62vh;overflow:auto"></div>
+    <div class="modal-actions"><button id="usersClose" class="btn btn-light" type="button">סגור</button></div>
+  </div>
+</div>
+
 <script>
 // ====== config ======
 const API = "https://hebrewbooks-forum-api.hebrewbooks.workers.dev";
@@ -410,12 +419,15 @@ function renderAuth(){
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
-    const reqBtn = atLeast("admin") ? ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות</button>` : "";
+    const adminBtns = atLeast("admin")
+      ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים</button>` +
+        ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות</button>`
+      : "";
     slot.innerHTML =
-      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + reqBtn +
+      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + adminBtns +
       ` <button class="btn btn-ghost btn-sm" id="logoutBtn">יציאה</button>`;
     $("logoutBtn").onclick = logout;
-    if (atLeast("admin")) $("reqBtn").onclick = openRequests;
+    if (atLeast("admin")){ $("reqBtn").onclick = openRequests; $("usersBtn").onclick = openUsers; }
   } else {
     slot.innerHTML = `<button class="btn btn-gold btn-sm" id="loginBtn">התחברות</button>`;
     $("loginBtn").onclick = openAuth;
@@ -540,6 +552,59 @@ async function decideReq(id, approve){
     flash(approve ? "המשתמש אושר." : "הבקשה נדחתה.", "ok");
     renderRequests((await api("/admin/requests")).requests);
   } catch(e){ flash(e.message, "err"); }
+}
+
+// ---- admin: manage all users ----
+const STATUS_LABEL = { incomplete: "לא הושלם", pending: "ממתין", approved: "מאושר", rejected: "נדחה" };
+const ROLE_LABEL = { member: "חבר", moderator: "מודרטור", admin: "מנהל" };
+async function openUsers(){
+  $("usersOverlay").classList.remove("hidden");
+  $("usersList").innerHTML = `<div class="empty">טוען…</div>`;
+  await reloadUsers();
+}
+function closeUsers(){ $("usersOverlay").classList.add("hidden"); }
+async function reloadUsers(){
+  try{ renderUsers((await api("/admin/users")).users); }
+  catch(e){ $("usersList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderUsers(list){
+  if (!list.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים.</div>`; return; }
+  $("usersList").innerHTML = list.map(u => {
+    const self = me && u.id === me.id;
+    const roleSel = `<select class="in usr-role" data-id="${u.id}" ${self?"disabled":""} style="width:auto;padding:6px 10px">` +
+      ["member","moderator","admin"].map(r => `<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABEL[r]}</option>`).join("") +
+      `</select>`;
+    let actions = "";
+    if (u.status === "pending"){
+      actions += `<button class="btn btn-gold btn-sm" data-approve="${u.id}">אשר</button>`;
+      actions += `<button class="btn btn-danger btn-sm" data-reject="${u.id}">דחה</button>`;
+    }
+    if (!self)
+      actions += `<button class="btn btn-light btn-sm" data-block="${u.id}" data-blocked="${u.is_blocked?1:0}">${u.is_blocked?"בטל חסימה":"חסום"}</button>`;
+    const blockedTag = u.is_blocked ? ` <span class="role-tag" style="background:#fbeeeb;color:var(--danger)">חסום</span>` : "";
+    return `<div class="req-row">
+      <div><b>${esc(u.display_name)}</b>${self?' <span class="req-meta">(אתה)</span>':''}${blockedTag}</div>
+      <div class="req-meta">${esc(u.full_name||"")} · ${esc(u.email)} · ${STATUS_LABEL[u.status]||esc(u.status)}</div>
+      <div class="post-actions" style="align-items:center">${roleSel}${actions}</div>
+    </div>`;
+  }).join("");
+  $("usersList").querySelectorAll(".usr-role").forEach(sel => sel.onchange = () => changeRole(sel.dataset.id, sel.value));
+  $("usersList").querySelectorAll("[data-block]").forEach(el => el.onclick = () => toggleBlock(el.dataset.block, el.dataset.blocked === "0"));
+  $("usersList").querySelectorAll("[data-approve]").forEach(el => el.onclick = () => decideUser(el.dataset.approve, true));
+  $("usersList").querySelectorAll("[data-reject]").forEach(el => el.onclick = () => decideUser(el.dataset.reject, false));
+}
+async function changeRole(id, role){
+  try{ await api(`/users/${id}/role`, { method:"PATCH", body:{ role }}); flash("התפקיד עודכן.", "ok"); }
+  catch(e){ flash(e.message, "err"); }
+  reloadUsers();
+}
+async function toggleBlock(id, blocked){
+  try{ await api(`/users/${id}/block`, { method:"PATCH", body:{ blocked }}); flash(blocked?"המשתמש נחסם.":"החסימה בוטלה.", "ok"); reloadUsers(); }
+  catch(e){ flash(e.message, "err"); }
+}
+async function decideUser(id, approve){
+  try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST" }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); }
+  catch(e){ flash(e.message, "err"); }
 }
 
 // On the login redirect we land with #token=... (or #error=...) in the URL fragment.
@@ -786,6 +851,9 @@ $("joinOverlay").onclick = (e) => { if (e.target === $("joinOverlay")) closeJoin
 // admin requests modal
 $("reqClose").onclick = closeRequests;
 $("reqOverlay").onclick = (e) => { if (e.target === $("reqOverlay")) closeRequests(); };
+// admin users modal
+$("usersClose").onclick = closeUsers;
+$("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
 
 (async function init(){
   consumeHash();
