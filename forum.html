@@ -122,6 +122,29 @@
   .modal-actions{display:flex;gap:10px}
   .btn-danger-solid{background:var(--danger);color:#fff}
   .btn-danger-solid:hover{background:#a83d27}
+
+  /* images inside posts */
+  .post-img{max-width:100%;max-height:520px;border-radius:11px;margin:8px 0;display:block;border:1px solid var(--line)}
+
+  /* auth modal extras */
+  .gbtn-full{width:100%;justify-content:center}
+  .auth-divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.85rem;margin:16px 0}
+  .auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tab{flex:1;padding:9px;border:1px solid var(--line);background:#fff;border-radius:10px;
+    font-family:inherit;font-weight:700;color:var(--muted);cursor:pointer}
+  .tab.active{border-color:var(--gold);color:var(--ink);background:#fffdf6}
+  .auth-fields{display:flex;flex-direction:column;gap:10px}
+
+  /* registration-status banner + admin request rows */
+  .status-banner{margin:0 0 18px;padding:14px 16px;border-radius:12px;font-weight:600;
+    background:#fbf3df;border:1px solid var(--gold-soft);color:#6b531a;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .status-banner.hidden{display:none}
+  .req-row{padding:14px 0;border-bottom:1px solid var(--line)}
+  .req-row:last-child{border-bottom:0}
+  .req-meta{color:var(--muted);font-size:.86rem;margin-top:2px}
+  .req-reason{color:var(--ink);margin:8px 0 10px;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -140,6 +163,7 @@
 
 <main class="wrap">
   <div id="msg" class="msg"></div>
+  <div id="statusBanner" class="status-banner hidden"></div>
 
   <!-- ===== list view ===== -->
   <section id="viewList" class="layout">
@@ -169,7 +193,11 @@
       <form class="compose" id="replyForm">
         <label class="fld">תגובה</label>
         <textarea class="in" id="replyBody" placeholder="כתוב תגובה..." required></textarea>
-        <div class="row-actions"><button class="btn btn-gold" type="submit">שלח תגובה</button></div>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit">שלח תגובה</button>
+          <button class="btn btn-light" type="button" id="replyImgBtn">🖼 תמונה</button>
+          <input type="file" id="replyImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+        </div>
       </form>
     </div>
     <div id="lockedNote" class="signed-note hidden">🔒 הנושא נעול לתגובות.</div>
@@ -193,7 +221,11 @@
           <label class="fld">תוכן</label>
           <textarea class="in" id="newBody" placeholder="פתח את הדיון..." required></textarea>
         </div>
-        <div class="row-actions"><button class="btn btn-gold" type="submit">פרסם נושא</button></div>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit">פרסם נושא</button>
+          <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
+          <input type="file" id="newImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+        </div>
       </form>
     </div>
   </section>
@@ -208,6 +240,60 @@
       <button id="modalOk" class="btn btn-gold">אישור</button>
       <button id="modalCancel" class="btn btn-light">ביטול</button>
     </div>
+  </div>
+</div>
+
+<!-- auth modal: Google + email/password (login / register) -->
+<div id="authOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>התחברות</h2>
+    <a id="googleBtn" class="btn google-btn gbtn-full" href="#">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.2 13.6 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.4 5.7C43.7 38 46.5 31.9 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.7-2.9-.7-4.7s.3-3.3.7-4.7l-7.8-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.4-5.7c-2 1.4-4.7 2.3-7.8 2.3-6.4 0-11.8-4.1-13.7-9.8l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      התחבר עם Google</a>
+    <div class="auth-divider">או באמצעות אימייל</div>
+    <div class="tabs">
+      <button class="tab active" data-mode="login" type="button">כניסה</button>
+      <button class="tab" data-mode="register" type="button">הרשמה</button>
+    </div>
+    <div class="auth-fields">
+      <input id="auFull" class="in hidden" type="text" placeholder="שם פרטי ומשפחה" maxlength="120">
+      <input id="auName" class="in hidden" type="text" placeholder="כינוי (יוצג בפורום)" maxlength="80" autocomplete="nickname">
+      <input id="auEmail" class="in" type="email" placeholder="אימייל" autocomplete="email">
+      <input id="auPass" class="in" type="password" placeholder="סיסמה (לפחות 6 תווים)" autocomplete="current-password">
+      <textarea id="auReason" class="in hidden" placeholder="מדוע ברצונך להצטרף לפורום?" maxlength="1000" style="min-height:80px"></textarea>
+    </div>
+    <div id="authErr" class="modal-msg hidden" style="color:var(--danger);margin-top:12px"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button id="auSubmit" class="btn btn-gold" type="button">כניסה</button>
+      <button id="auCancel" class="btn btn-light" type="button">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- join-request modal (shown to Google users who haven't filled the form yet) -->
+<div id="joinOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>בקשת הצטרפות לפורום</h2>
+    <p class="modal-sub" style="margin-bottom:14px">ההרשמה טעונה אישור מנהל. מלא את הפרטים והבקשה תועבר לאישור.</p>
+    <div class="auth-fields">
+      <input id="jFull" class="in" type="text" placeholder="שם פרטי ומשפחה" maxlength="120">
+      <input id="jName" class="in" type="text" placeholder="כינוי (יוצג בפורום)" maxlength="80">
+      <textarea id="jReason" class="in" placeholder="מדוע ברצונך להצטרף לפורום?" maxlength="1000" style="min-height:90px"></textarea>
+    </div>
+    <div id="joinErr" class="modal-msg hidden" style="color:var(--danger);margin-top:12px"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button id="jSubmit" class="btn btn-gold" type="button">שלח בקשה</button>
+      <button id="jCancel" class="btn btn-light" type="button">לא עכשיו</button>
+    </div>
+  </div>
+</div>
+
+<!-- admin: review pending join requests -->
+<div id="reqOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:580px">
+    <h2>בקשות הצטרפות</h2>
+    <div id="reqList" class="modal-body"></div>
+    <div class="modal-actions"><button id="reqClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
 
@@ -226,10 +312,26 @@ let curTopicId = null;
 const $ = (id) => document.getElementById(id);
 const RANK = { member: 1, moderator: 2, admin: 3 };
 const atLeast = (role) => me && RANK[me.role] >= RANK[role];
+// Only an approved, non-blocked user may post (matches the server's canWrite).
+const canPost = () => me && me.status === "approved" && !me.is_blocked;
 
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+// Render post body: escape EVERYTHING first, then turn image references into <img>.
+// The only HTML we emit from user text is <img> tags WE build (no event handlers → no
+// XSS) plus <br> for newlines. Our own uploads are stored as "/img/<key>"; we also
+// auto-embed pasted https image URLs.
+function resolveImg(u){ return u.startsWith("/img/") ? API + u : u; }
+function imgTag(src, alt){ return `<img class="post-img" src="${src}" alt="${alt}" loading="lazy">`; }
+function renderBody(text){
+  let h = esc(text);
+  h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
+    (_, alt, url) => imgTag(resolveImg(url), alt));
+  h = h.replace(/(^|\s)(\/img\/[A-Za-z0-9._\-]+|https?:\/\/\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?)(?=\s|$)/gi,
+    (_, pre, url) => pre + imgTag(resolveImg(url), ""));
+  return h.replace(/\n/g, "<br>");
 }
 function when(ts){
   try { return new Date(ts*1000).toLocaleString("he-IL",{dateStyle:"medium",timeStyle:"short"}); }
@@ -308,19 +410,35 @@ function renderAuth(){
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
+    const reqBtn = atLeast("admin") ? ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות</button>` : "";
     slot.innerHTML =
-      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` +
+      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + reqBtn +
       ` <button class="btn btn-ghost btn-sm" id="logoutBtn">יציאה</button>`;
     $("logoutBtn").onclick = logout;
+    if (atLeast("admin")) $("reqBtn").onclick = openRequests;
   } else {
-    slot.innerHTML =
-      `<a class="btn google-btn btn-sm" href="${API}/auth/google/start">` +
-      `<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.2 13.6 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.4 5.7C43.7 38 46.5 31.9 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.7-2.9-.7-4.7s.3-3.3.7-4.7l-7.8-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.4-5.7c-2 1.4-4.7 2.3-7.8 2.3-6.4 0-11.8-4.1-13.7-9.8l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>` +
-      `התחבר עם Google</a>`;
+    slot.innerHTML = `<button class="btn btn-gold btn-sm" id="loginBtn">התחברות</button>`;
+    $("loginBtn").onclick = openAuth;
   }
-  // role-gated UI
-  $("newTopicBtn").classList.toggle("hidden", !(me && !me.is_blocked));
+  // role/status-gated UI
+  $("newTopicBtn").classList.toggle("hidden", !canPost());
   $("addCatBtn").classList.toggle("hidden", !atLeast("admin"));
+  updateStatusBanner();
+}
+
+// Shows pending/incomplete/rejected users why they can't post yet.
+function updateStatusBanner(){
+  const el = $("statusBanner");
+  if (!me || me.status === "approved"){ el.classList.add("hidden"); return; }
+  if (me.status === "incomplete")
+    el.innerHTML = `<span>עליך להשלים בקשת הצטרפות כדי להשתתף בפורום.</span>` +
+                   `<button class="btn btn-gold btn-sm" id="bannerJoinBtn">מילוי בקשה</button>`;
+  else if (me.status === "pending")
+    el.innerHTML = `<span>בקשת ההצטרפות שלך התקבלה וממתינה לאישור מנהל. בינתיים ניתן לקרוא בלבד.</span>`;
+  else if (me.status === "rejected")
+    el.innerHTML = `<span>בקשת ההצטרפות שלך נדחתה. לפרטים ניתן לפנות למנהל.</span>`;
+  el.classList.remove("hidden");
+  if (me.status === "incomplete") $("bannerJoinBtn").onclick = openJoin;
 }
 
 async function refreshMe(){
@@ -333,6 +451,95 @@ async function logout(){
   try { await api("/auth/logout", { method:"POST" }); } catch {}
   token = null; localStorage.removeItem("forum_token"); me = null;
   renderAuth(); flash("התנתקת.", "ok");
+}
+
+// ---- email/password auth modal (login + join request) ----
+let authMode = "login";
+function openAuth(){
+  $("googleBtn").href = API + "/auth/google/start";
+  $("auEmail").value = $("auPass").value = $("auName").value = $("auFull").value = $("auReason").value = "";
+  setAuthMode("login");
+  $("authOverlay").classList.remove("hidden");
+  $("auEmail").focus();
+}
+function closeAuth(){ $("authOverlay").classList.add("hidden"); }
+function setAuthMode(mode){
+  authMode = mode;
+  const reg = mode === "register";
+  document.querySelectorAll("#authOverlay .tab").forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
+  $("auFull").classList.toggle("hidden", !reg);
+  $("auName").classList.toggle("hidden", !reg);
+  $("auReason").classList.toggle("hidden", !reg);
+  $("auPass").setAttribute("autocomplete", reg ? "new-password" : "current-password");
+  $("auSubmit").textContent = reg ? "שלח בקשה" : "כניסה";
+  $("authErr").classList.add("hidden");
+}
+async function submitAuth(){
+  const email = $("auEmail").value.trim(), password = $("auPass").value;
+  const path = authMode === "register" ? "/auth/register" : "/auth/login";
+  const body = authMode === "register"
+    ? { email, password, full_name: $("auFull").value.trim(), display_name: $("auName").value.trim(), reason: $("auReason").value.trim() }
+    : { email, password };
+  try{
+    const r = await api(path, { method:"POST", body });
+    token = r.token; localStorage.setItem("forum_token", token);
+    closeAuth();
+    await refreshMe(); await loadTopics();
+    flash(authMode === "register" ? "בקשתך נשלחה וממתינה לאישור מנהל." : "התחברת!", "ok");
+  } catch(e){
+    $("authErr").textContent = e.message; $("authErr").classList.remove("hidden");
+  }
+}
+
+// ---- join-request modal (Google users completing their profile) ----
+function openJoin(){
+  $("jFull").value = (me && me.full_name) || "";
+  $("jName").value = (me && me.display_name) || "";
+  $("jReason").value = (me && me.reason) || "";
+  $("joinErr").classList.add("hidden");
+  $("joinOverlay").classList.remove("hidden");
+  $("jFull").focus();
+}
+function closeJoin(){ $("joinOverlay").classList.add("hidden"); }
+async function submitJoin(){
+  const body = { full_name:$("jFull").value.trim(), display_name:$("jName").value.trim(), reason:$("jReason").value.trim() };
+  try{
+    await api("/auth/request", { method:"POST", body });
+    closeJoin();
+    await refreshMe();
+    flash("בקשתך נשלחה וממתינה לאישור מנהל.", "ok");
+  } catch(e){ $("joinErr").textContent = e.message; $("joinErr").classList.remove("hidden"); }
+}
+
+// ---- admin: pending join requests ----
+async function openRequests(){
+  $("reqOverlay").classList.remove("hidden");
+  $("reqList").innerHTML = `<div class="empty">טוען…</div>`;
+  try{ renderRequests((await api("/admin/requests")).requests); }
+  catch(e){ $("reqList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function closeRequests(){ $("reqOverlay").classList.add("hidden"); }
+function renderRequests(list){
+  if (!list.length){ $("reqList").innerHTML = `<div class="empty">אין בקשות ממתינות.</div>`; return; }
+  $("reqList").innerHTML = list.map(r => `
+    <div class="req-row">
+      <div><b>${esc(r.full_name||"—")}</b> · כינוי: ${esc(r.display_name)}</div>
+      <div class="req-meta">${esc(r.email)} · ${when(r.created_at)}</div>
+      <div class="req-reason">${esc(r.reason||"")}</div>
+      <div class="post-actions">
+        <button class="btn btn-gold btn-sm" data-approve="${r.id}">אשר</button>
+        <button class="btn btn-danger btn-sm" data-reject="${r.id}">דחה</button>
+      </div>
+    </div>`).join("");
+  $("reqList").querySelectorAll("[data-approve]").forEach(el => el.onclick = () => decideReq(el.dataset.approve, true));
+  $("reqList").querySelectorAll("[data-reject]").forEach(el => el.onclick = () => decideReq(el.dataset.reject, false));
+}
+async function decideReq(id, approve){
+  try{
+    await api(`/users/${id}/${approve ? "approve" : "reject"}`, { method:"POST" });
+    flash(approve ? "המשתמש אושר." : "הבקשה נדחתה.", "ok");
+    renderRequests((await api("/admin/requests")).requests);
+  } catch(e){ flash(e.message, "err"); }
 }
 
 // On the login redirect we land with #token=... (or #error=...) in the URL fragment.
@@ -405,7 +612,7 @@ async function openTopic(id){
   renderPosts(data.posts);
 
   // reply box / locked note
-  const canReply = me && !me.is_blocked && (!t.is_locked || atLeast("moderator"));
+  const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
   if (canReply) $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); };
@@ -439,7 +646,7 @@ function renderPosts(posts){
         <span class="when">${when(p.created_at)}${p.edited_at?" · נערך":""}</span>
         ${staff?`<span class="staff-menu">${staff}</span>`:""}
       </div>
-      <div class="post-body">${esc(p.body)}</div>
+      <div class="post-body">${renderBody(p.body)}</div>
       ${actions?`<div class="post-actions">${actions}</div>`:""}
     </div>`;
   }).join("");
@@ -473,6 +680,28 @@ async function submitReply(id){
     await api(`/topics/${id}/posts`, { method:"POST", body:{ body:$("replyBody").value }});
     $("replyBody").value = "";
     openTopic(id);
+  } catch(e){ flash(e.message, "err"); }
+}
+
+// ---- image upload: stores to R2 via the Worker, embeds Markdown ![](…) at the cursor ----
+function insertAtCursor(ta, text){
+  const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+  ta.focus(); ta.selectionStart = ta.selectionEnd = s + text.length;
+}
+async function uploadAndInsert(input, textarea){
+  const file = input.files && input.files[0];
+  input.value = "";  // allow re-picking the same file later
+  if (!file) return;
+  flash("מעלה תמונה…", "ok");
+  try{
+    const fd = new FormData(); fd.append("image", file);
+    const headers = {}; if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(API + "/upload", { method:"POST", headers, body:fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    insertAtCursor(textarea, `\n![](${data.url})\n`);
+    flash("התמונה הוטמעה — שלח כדי לפרסם.", "ok");
   } catch(e){ flash(e.message, "err"); }
 }
 async function deletePost(id){
@@ -537,9 +766,32 @@ $("newTopicBtn").onclick = () => show("viewNew");
 $("addCatBtn").onclick = addCategory;
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
+// auth modal
+$("auSubmit").onclick = submitAuth;
+$("auCancel").onclick = closeAuth;
+$("authOverlay").onclick = (e) => { if (e.target === $("authOverlay")) closeAuth(); };
+document.querySelectorAll("#authOverlay .tab").forEach(t => t.onclick = () => setAuthMode(t.dataset.mode));
+$("auPass").onkeydown = (e) => { if (e.key === "Enter") submitAuth(); };
+
+// image upload buttons
+$("replyImgBtn").onclick = () => $("replyImgInput").click();
+$("replyImgInput").onchange = () => uploadAndInsert($("replyImgInput"), $("replyBody"));
+$("newImgBtn").onclick = () => $("newImgInput").click();
+$("newImgInput").onchange = () => uploadAndInsert($("newImgInput"), $("newBody"));
+
+// join-request modal
+$("jSubmit").onclick = submitJoin;
+$("jCancel").onclick = closeJoin;
+$("joinOverlay").onclick = (e) => { if (e.target === $("joinOverlay")) closeJoin(); };
+// admin requests modal
+$("reqClose").onclick = closeRequests;
+$("reqOverlay").onclick = (e) => { if (e.target === $("reqOverlay")) closeRequests(); };
+
 (async function init(){
   consumeHash();
   await refreshMe();
+  // Google first-timers (no join form yet) are prompted immediately.
+  if (me && me.status === "incomplete") openJoin();
   try{ await loadCategories(); await loadTopics(); }
   catch(e){ flash("טעינת הפורום נכשלה: " + e.message, "err"); }
 })();
