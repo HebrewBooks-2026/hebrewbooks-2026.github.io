@@ -297,6 +297,20 @@
   </div>
 </div>
 
+<!-- edit a post (textarea + image button, mirrors the compose forms) -->
+<div id="editOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px">
+    <h2>עריכת הודעה</h2>
+    <textarea id="editBody" class="in" style="min-height:170px"></textarea>
+    <div class="row-actions" style="margin-top:12px">
+      <button id="editSave" class="btn btn-gold" type="button">שמור</button>
+      <button id="editImgBtn" class="btn btn-light" type="button">🖼 תמונה</button>
+      <input type="file" id="editImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+      <button id="editCancel" class="btn btn-light" type="button">ביטול</button>
+    </div>
+  </div>
+</div>
+
 <!-- admin: manage all users -->
 <div id="usersOverlay" class="modal-overlay hidden">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:680px">
@@ -725,7 +739,7 @@ function renderPosts(posts){
     const act = el.getAttribute("data-act");
     const id = parseInt(el.getAttribute("data-id"),10);
     if (act === "del")   return deletePost(id);
-    if (act === "edit")  return editPost(id);
+    if (act === "edit")  return openEdit(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
@@ -779,16 +793,21 @@ async function deletePost(id){
   try{ await api(`/posts/${id}`, { method:"DELETE" }); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
-async function editPost(id){
+// Dedicated edit modal: pre-fills the RAW body (keeps ![](…) image markup intact) and
+// offers the same image button as compose, so images survive — and can be added — in edit.
+let editingId = null;
+function openEdit(id){
   const post = curPosts.find(p => p.id === id);
-  const current = post ? post.body : "";
-  const r = await openModal({ title:"עריכת הודעה",
-    bodyHTML:`<textarea class="in" data-field="body" style="min-height:160px">${esc(current)}</textarea>`,
-    okText:"שמור" });
-  if (!r) return;
-  const body = r.body.trim();
+  editingId = id;
+  $("editBody").value = post ? post.body : "";
+  $("editOverlay").classList.remove("hidden");
+  $("editBody").focus();
+}
+function closeEdit(){ $("editOverlay").classList.add("hidden"); editingId = null; }
+async function saveEdit(){
+  const body = $("editBody").value.trim();
   if (!body) return flash("ההודעה ריקה.", "err");
-  try{ await api(`/posts/${id}`, { method:"PATCH", body:{ body }}); openTopic(curTopicId); }
+  try{ await api(`/posts/${editingId}`, { method:"PATCH", body:{ body }}); closeEdit(); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
 
@@ -861,6 +880,12 @@ $("reqOverlay").onclick = (e) => { if (e.target === $("reqOverlay")) closeReques
 // admin users modal
 $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
+// edit-post modal
+$("editSave").onclick = saveEdit;
+$("editCancel").onclick = closeEdit;
+$("editOverlay").onclick = (e) => { if (e.target === $("editOverlay")) closeEdit(); };
+$("editImgBtn").onclick = () => $("editImgInput").click();
+$("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBody"));
 
 (async function init(){
   consumeHash();
