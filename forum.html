@@ -125,6 +125,9 @@
 
   /* images inside posts */
   .post-img{max-width:100%;max-height:520px;border-radius:11px;margin:8px 0;display:block;border:1px solid var(--line)}
+  /* links inside posts */
+  .post-link{color:var(--indigo);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+  .post-link:hover{color:var(--gold)}
 
   /* auth modal extras */
   .gbtn-full{width:100%;justify-content:center}
@@ -196,6 +199,7 @@
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">שלח תגובה</button>
           <button class="btn btn-light" type="button" id="replyImgBtn">🖼 תמונה</button>
+          <button class="btn btn-light" type="button" id="replyLinkBtn">🔗 קישור</button>
           <input type="file" id="replyImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
         </div>
       </form>
@@ -224,6 +228,7 @@
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">פרסם נושא</button>
           <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
+          <button class="btn btn-light" type="button" id="newLinkBtn">🔗 קישור</button>
           <input type="file" id="newImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
         </div>
       </form>
@@ -305,6 +310,7 @@
     <div class="row-actions" style="margin-top:12px">
       <button id="editSave" class="btn btn-gold" type="button">שמור</button>
       <button id="editImgBtn" class="btn btn-light" type="button">🖼 תמונה</button>
+      <button id="editLinkBtn" class="btn btn-light" type="button">🔗 קישור</button>
       <input type="file" id="editImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
       <button id="editCancel" class="btn btn-light" type="button">ביטול</button>
     </div>
@@ -349,12 +355,28 @@ function esc(s){
 // auto-embed pasted https image URLs.
 function resolveImg(u){ return u.startsWith("/img/") ? API + u : u; }
 function imgTag(src, alt){ return `<img class="post-img" src="${src}" alt="${alt}" loading="lazy">`; }
+// Links open in a new tab. The URL is already HTML-escaped (esc ran first) and the
+// regexes only ever capture http(s) URLs — so no javascript:/data: scheme can slip in.
+function linkTag(href, label){ return `<a class="post-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`; }
 function renderBody(text){
   let h = esc(text);
+  // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
+  // 2) link markdown [text](url) -> <a>  (http/https only; runs AFTER images so ![]() is safe)
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (_, label, url) => linkTag(url, label));
+  // 3) bare image URLs -> <img>
   h = h.replace(/(^|\s)(\/img\/[A-Za-z0-9._\-]+|https?:\/\/\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?)(?=\s|$)/gi,
     (_, pre, url) => pre + imgTag(resolveImg(url), ""));
+  // 4) remaining bare http(s) URLs -> <a>. (^|\s) guards against matching inside the
+  // href="…"/src="…" we just emitted (those are preceded by a quote, not whitespace).
+  h = h.replace(/(^|\s)(https?:\/\/[^\s<]+)/gi, (_, pre, url) => {
+    let trail = "";                              // keep trailing sentence punctuation OUT of the link
+    const m = url.match(/[.,!?]+$/);
+    if (m){ trail = m[0]; url = url.slice(0, -trail.length); }
+    return pre + linkTag(url, url) + trail;
+  });
   return h.replace(/\n/g, "<br>");
 }
 function when(ts){
@@ -773,6 +795,26 @@ function insertAtCursor(ta, text){
   ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
   ta.focus(); ta.selectionStart = ta.selectionEnd = s + text.length;
 }
+// ---- link insert: asks for URL + optional display text, drops Markdown [text](url) at the cursor ----
+async function insertLink(textarea){
+  // pre-fill the URL field if the user already selected a URL in the textarea
+  const sel = textarea.value.slice(textarea.selectionStart ?? 0, textarea.selectionEnd ?? 0).trim();
+  const r = await openModal({
+    title: "הוספת קישור",
+    bodyHTML:
+      `<label class="fld">כתובת (URL)</label>` +
+      `<input class="in" data-field="url" placeholder="https://..." value="${esc(/^https?:\/\//i.test(sel) ? sel : "")}" style="margin-bottom:10px">` +
+      `<label class="fld">טקסט להצגה (לא חובה)</label>` +
+      `<input class="in" data-field="text" placeholder="הטקסט שיוצג כקישור">`,
+    okText: "הוסף קישור" });
+  if (!r) return;
+  let url = (r.url || "").trim();
+  if (!url) return flash("לא הוזנה כתובת.", "err");
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;   // forgive a missing scheme
+  const text = (r.text || "").trim();
+  // named link -> [text](url); bare url -> pad with spaces so the auto-linker catches it
+  insertAtCursor(textarea, text ? `[${text}](${url})` : ` ${url} `);
+}
 async function uploadAndInsert(input, textarea){
   const file = input.files && input.files[0];
   input.value = "";  // allow re-picking the same file later
@@ -869,6 +911,11 @@ $("replyImgBtn").onclick = () => $("replyImgInput").click();
 $("replyImgInput").onchange = () => uploadAndInsert($("replyImgInput"), $("replyBody"));
 $("newImgBtn").onclick = () => $("newImgInput").click();
 $("newImgInput").onchange = () => uploadAndInsert($("newImgInput"), $("newBody"));
+
+// link insert buttons
+$("replyLinkBtn").onclick = () => insertLink($("replyBody"));
+$("newLinkBtn").onclick = () => insertLink($("newBody"));
+$("editLinkBtn").onclick = () => insertLink($("editBody"));
 
 // join-request modal
 $("jSubmit").onclick = submitJoin;
