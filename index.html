@@ -77,6 +77,12 @@
   @media(max-width:880px){.cta{justify-content:center}}
   .sub-dl{margin-top:14px;font-size:.92rem;opacity:.72}
   .sub-dl a{color:var(--amber);font-weight:600;border-bottom:1px dotted rgba(240,201,105,.5)}
+  .offline-note{display:flex;align-items:center;gap:10px;margin-top:18px;padding:12px 16px;
+    background:rgba(240,201,105,.12);border:1px solid rgba(240,201,105,.45);border-radius:12px;
+    color:#f3e3bd;font-size:.95rem;font-weight:600;text-decoration:none;transition:background .15s,transform .15s}
+  .offline-note:hover{background:rgba(240,201,105,.2);transform:translateY(-2px)}
+  .offline-note b{color:var(--amber)}
+  .offline-ic{font-size:1.25rem;line-height:1;flex-shrink:0}
 
   /* Premium desktop-monitor mockup wrapping the real app screenshot — pure CSS, no
      extra image assets. Five tricks combine to elevate it beyond a "frame around a PNG":
@@ -267,7 +273,11 @@
           </a>
           <a class="btn btn-ghost" href="#download">כל אפשרויות ההורדה</a>
         </div>
-        <p class="sub-dl">חבילה קומפקטית · מתעדכנת אוטומטית · גם <a href="#download">גרסה לא-מקוונת</a> ו<a href="#download">נייד (Portable)</a></p>
+        <a href="#offline" class="offline-note">
+          <span class="offline-ic">⚠</span>
+          <span>מתקינים במחשב <b>ללא אינטרנט</b>? לחצו כאן לגרסה הלא-מקוונת ←</span>
+        </a>
+        <p class="sub-dl">חבילה קומפקטית · מתעדכנת אוטומטית · זמין גם <a href="#download">נייד (Portable)</a></p>
       </div>
 
       <div class="hero-mock">
@@ -366,7 +376,7 @@
         <p class="alt">או <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-stable-Portable.zip">גרסה ניידת (ZIP)</a></p>
       </div>
 
-      <div class="dl-card">
+      <div class="dl-card" id="offline">
         <h3>גרסה לא-מקוונת</h3>
         <p class="why">כוללת בתוכה את כל הרכיבים — להתקנה במחשב ללא אינטרנט או בלי .NET מותקן. קובץ גדול יותר, אך עצמאי לחלוטין.</p>
         <a class="btn btn-dark" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-offline-Setup.exe">⬇ התקנה לא-מקוונת (Setup)</a>
