@@ -128,6 +128,14 @@
   /* links inside posts */
   .post-link{color:var(--indigo);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
   .post-link:hover{color:var(--gold)}
+  /* rich-text editor toolbar */
+  .editor-toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+  .fmt-btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 11px;
+    font-family:inherit;font-size:.92rem;font-weight:700;color:var(--ink);cursor:pointer;line-height:1.1}
+  .fmt-btn:hover{background:#fbf8f0;border-color:var(--gold)}
+  .mode-toggle{margin-inline-start:auto;border:1px solid var(--line);background:#fff;border-radius:8px;
+    padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;color:var(--muted);cursor:pointer}
+  .editor-toolbar.html-on .mode-toggle{background:#fffdf6;border-color:var(--gold);color:#7a5a14}
 
   /* auth modal extras */
   .gbtn-full{width:100%;justify-content:center}
@@ -358,8 +366,69 @@ function imgTag(src, alt){ return `<img class="post-img" src="${src}" alt="${alt
 // Links open in a new tab. The URL is already HTML-escaped (esc ran first) and the
 // regexes only ever capture http(s) URLs — so no javascript:/data: scheme can slip in.
 function linkTag(href, label){ return `<a class="post-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`; }
+// ---- safe HTML mode -------------------------------------------------------
+// A body that starts with HTML_MARK is rendered as HTML — but ONLY through this
+// whitelist sanitizer. The untrusted source is parsed into an INERT document
+// (DOMParser runs no scripts and fetches nothing), then a clean tree is rebuilt
+// allowing only known-safe tags/attributes. We never feed untrusted text to
+// innerHTML; the only innerHTML we read is of the tree WE built. So no <script>,
+// event handler (onerror=…), javascript: URL, or CSS url()/expression survives.
+const HTML_MARK = "<!--html-->";
+const SANITIZE_TAGS  = new Set("B STRONG I EM U S DEL MARK SMALL SUB SUP H2 H3 H4 P DIV BR HR BLOCKQUOTE UL OL LI CODE PRE SPAN A IMG".split(" "));
+const SANITIZE_ATTRS = { A: ["href"], IMG: ["src", "alt"] };
+const SANITIZE_STYLE = new Set(["color","background-color","text-align","font-weight","font-style","text-decoration"]);
+function safeStyle(s){
+  const out = [];
+  for (const decl of String(s).split(";")){
+    const i = decl.indexOf(":"); if (i < 0) continue;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const val  = decl.slice(i + 1).trim();
+    if (!SANITIZE_STYLE.has(prop) || !val || val.length > 40) continue;
+    if (/[()\\]|url|expression|javascript|@import|&/i.test(val)) continue; // block functions/imports
+    out.push(prop + ":" + val);
+  }
+  return out.join(";");
+}
+function safeLinkHref(h){ return /^https?:\/\//i.test(h) ? h : null; }
+function safeImgSrc(s){
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^\/img\/[A-Za-z0-9._\-]+$/.test(s)) return API + s;
+  return null;
+}
+function cleanNodes(src, dest){
+  for (const child of Array.from(src.childNodes)){
+    if (child.nodeType === 3){ dest.appendChild(document.createTextNode(child.nodeValue)); continue; }
+    if (child.nodeType !== 1) continue;                              // drop comments / others
+    const tag = child.tagName;
+    if (!SANITIZE_TAGS.has(tag)){ cleanNodes(child, dest); continue; } // unwrap unknown tag, keep its text
+    const el = document.createElement(tag);
+    for (const a of (SANITIZE_ATTRS[tag] || [])){
+      if (!child.hasAttribute(a)) continue;
+      let v = child.getAttribute(a);
+      if (tag === "A"   && a === "href"){ v = safeLinkHref(v); if (!v) continue; }
+      if (tag === "IMG" && a === "src" ){ v = safeImgSrc(v);  if (!v) continue; }
+      el.setAttribute(a, v);
+    }
+    if (child.hasAttribute("style")){ const st = safeStyle(child.getAttribute("style")); if (st) el.setAttribute("style", st); }
+    if (tag === "A"){
+      if (!el.getAttribute("href")){ cleanNodes(child, dest); continue; }  // unsafe href -> unwrap to text
+      el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); el.className = "post-link";
+    }
+    if (tag === "IMG"){ if (!el.getAttribute("src")) continue; el.setAttribute("loading", "lazy"); el.className = "post-img"; }
+    cleanNodes(child, el);
+    dest.appendChild(el);
+  }
+}
+function sanitizeHtml(html){
+  const doc = new DOMParser().parseFromString(String(html), "text/html");
+  const box = document.createElement("div");
+  cleanNodes(doc.body, box);
+  return box.innerHTML;
+}
 function renderBody(text){
-  let h = esc(text);
+  const raw = String(text ?? "");
+  if (raw.startsWith(HTML_MARK)) return sanitizeHtml(raw.slice(HTML_MARK.length).replace(/^\n/, ""));
+  let h = esc(raw);
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
@@ -717,7 +786,7 @@ async function openTopic(id){
   const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
-  if (canReply) $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); };
+  if (canReply){ setMode($("replyBody"), "text"); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
 
   show("viewTopic");
 }
@@ -773,9 +842,9 @@ async function submitNewTopic(){
     const r = await api("/topics", { method:"POST", body:{
       category_id: parseInt($("newCat").value,10),
       title: $("newTitle").value,
-      body: $("newBody").value,
+      body: composeBody($("newBody")),
     }});
-    $("newTitle").value = ""; $("newBody").value = "";
+    $("newTitle").value = ""; $("newBody").value = ""; setMode($("newBody"), "text");
     flash("הנושא פורסם.", "ok");
     await loadCategories(); await loadTopics();
     openTopic(r.topic_id);
@@ -783,8 +852,8 @@ async function submitNewTopic(){
 }
 async function submitReply(id){
   try{
-    await api(`/topics/${id}/posts`, { method:"POST", body:{ body:$("replyBody").value }});
-    $("replyBody").value = "";
+    await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")) }});
+    $("replyBody").value = ""; setMode($("replyBody"), "text");
     openTopic(id);
   } catch(e){ flash(e.message, "err"); }
 }
@@ -794,6 +863,72 @@ function insertAtCursor(ta, text){
   const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
   ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
   ta.focus(); ta.selectionStart = ta.selectionEnd = s + text.length;
+}
+
+// ---- rich-text toolbar (HTML mode) ----------------------------------------
+// Each compose surface gets a toolbar + a text/HTML toggle. Formatting buttons
+// wrap the selection in safe tags and flip the surface to HTML mode; on submit,
+// composeBody() prefixes HTML_MARK so renderBody() sanitize-renders it.
+const HTML_FMT_BTNS = [
+  { label: "B",       title: "מודגש",     css: "font-weight:800",           wrap: ["<b>", "</b>"] },
+  { label: "I",       title: "נטוי",       css: "font-style:italic",         wrap: ["<i>", "</i>"] },
+  { label: "U",       title: "קו תחתון",   css: "text-decoration:underline", wrap: ["<u>", "</u>"] },
+  { label: "כותרת",   title: "כותרת",                                        wrap: ["<h3>", "</h3>"] },
+  { label: "• רשימה", title: "רשימה",                                        wrap: ["<ul>\n<li>", "</li>\n</ul>"] },
+  { label: "❝ ציטוט", title: "ציטוט",                                        wrap: ["<blockquote>", "</blockquote>"] },
+  { label: "🎨 צבע",  title: "צבע טקסט",  color: true },
+];
+function wrapSelection(ta, before, after){
+  ta.focus();
+  const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
+  const sel = ta.value.slice(s, e);
+  const ins = before + sel + after;
+  ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+  const pos = sel ? s + ins.length : s + before.length;   // selection wrapped -> after; empty -> between tags
+  ta.selectionStart = ta.selectionEnd = pos;
+  ta.focus();
+}
+function setMode(ta, mode){
+  ta.dataset.mode = mode;
+  const tb = ta._toolbar;
+  if (!tb) return;
+  tb.classList.toggle("html-on", mode === "html");
+  const tog = tb.querySelector(".mode-toggle");
+  if (tog) tog.textContent = mode === "html" ? "✦ מצב עיצוב (HTML)" : "מצב טקסט רגיל";
+}
+function applyFormat(ta, b){
+  setMode(ta, "html");
+  if (b.color){
+    openModal({ title: "צבע טקסט",
+      bodyHTML: `<input class="in" type="color" data-field="c" value="#c0492f" style="width:64px;height:42px;padding:2px">`
+              + `<p class="modal-sub">בחר צבע ולחץ "החל" — הוא יחול על הטקסט המסומן.</p>`,
+      okText: "החל" }).then(r => { if (r && r.c) wrapSelection(ta, `<span style="color:${r.c}">`, "</span>"); });
+    return;
+  }
+  wrapSelection(ta, b.wrap[0], b.wrap[1]);
+}
+function makeToolbar(ta){
+  const tb = document.createElement("div");
+  tb.className = "editor-toolbar";
+  for (const b of HTML_FMT_BTNS){
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "fmt-btn"; btn.title = b.title; btn.textContent = b.label;
+    if (b.css) btn.setAttribute("style", b.css);
+    btn.onclick = () => applyFormat(ta, b);
+    tb.appendChild(btn);
+  }
+  const tog = document.createElement("button");
+  tog.type = "button"; tog.className = "mode-toggle";
+  tog.title = "החלפה בין כתיבה רגילה לכתיבה עם תגיות HTML";
+  tog.onclick = () => setMode(ta, ta.dataset.mode === "html" ? "text" : "html");
+  tb.appendChild(tog);
+  ta._toolbar = tb;
+  ta.parentNode.insertBefore(tb, ta);
+  setMode(ta, "text");
+}
+// The body we send: HTML-mode posts get the marker prefix so the renderer sanitizes them.
+function composeBody(ta){
+  return ta.dataset.mode === "html" ? HTML_MARK + "\n" + ta.value : ta.value;
 }
 // ---- link insert: asks for URL + optional display text, drops Markdown [text](url) at the cursor ----
 async function insertLink(textarea){
@@ -812,8 +947,12 @@ async function insertLink(textarea){
   if (!url) return flash("לא הוזנה כתובת.", "err");
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;   // forgive a missing scheme
   const text = (r.text || "").trim();
-  // named link -> [text](url); bare url -> pad with spaces so the auto-linker catches it
-  insertAtCursor(textarea, text ? `[${text}](${url})` : ` ${url} `);
+  // HTML mode -> real <a> tag (sanitized on render); text mode -> Markdown / bare URL
+  if (textarea.dataset.mode === "html"){
+    insertAtCursor(textarea, `<a href="${url}">${text || url}</a>`);
+  } else {
+    insertAtCursor(textarea, text ? `[${text}](${url})` : ` ${url} `);
+  }
 }
 async function uploadAndInsert(input, textarea){
   const file = input.files && input.files[0];
@@ -826,7 +965,7 @@ async function uploadAndInsert(input, textarea){
     const res = await fetch(API + "/upload", { method:"POST", headers, body:fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    insertAtCursor(textarea, `\n![](${data.url})\n`);
+    insertAtCursor(textarea, textarea.dataset.mode === "html" ? `\n<img src="${data.url}">\n` : `\n![](${data.url})\n`);
     flash("התמונה הוטמעה — שלח כדי לפרסם.", "ok");
   } catch(e){ flash(e.message, "err"); }
 }
@@ -841,14 +980,17 @@ let editingId = null;
 function openEdit(id){
   const post = curPosts.find(p => p.id === id);
   editingId = id;
-  $("editBody").value = post ? post.body : "";
+  let body = post ? post.body : "";
+  if (body.startsWith(HTML_MARK)){ body = body.slice(HTML_MARK.length).replace(/^\n/, ""); setMode($("editBody"), "html"); }
+  else setMode($("editBody"), "text");
+  $("editBody").value = body;
   $("editOverlay").classList.remove("hidden");
   $("editBody").focus();
 }
 function closeEdit(){ $("editOverlay").classList.add("hidden"); editingId = null; }
 async function saveEdit(){
-  const body = $("editBody").value.trim();
-  if (!body) return flash("ההודעה ריקה.", "err");
+  if (!$("editBody").value.trim()) return flash("ההודעה ריקה.", "err");
+  const body = composeBody($("editBody"));
   try{ await api(`/posts/${editingId}`, { method:"PATCH", body:{ body }}); closeEdit(); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
@@ -895,7 +1037,7 @@ function backToList(){ show("viewList"); loadTopics(); }
 // ====== init ======
 $("backFromTopic").onclick = backToList;
 $("backFromNew").onclick = () => show("viewList");
-$("newTopicBtn").onclick = () => show("viewNew");
+$("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
 $("addCatBtn").onclick = addCategory;
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
@@ -916,6 +1058,11 @@ $("newImgInput").onchange = () => uploadAndInsert($("newImgInput"), $("newBody")
 $("replyLinkBtn").onclick = () => insertLink($("replyBody"));
 $("newLinkBtn").onclick = () => insertLink($("newBody"));
 $("editLinkBtn").onclick = () => insertLink($("editBody"));
+
+// rich-text formatting toolbars (text/HTML toggle) above each compose textarea
+makeToolbar($("newBody"));
+makeToolbar($("replyBody"));
+makeToolbar($("editBody"));
 
 // join-request modal
 $("jSubmit").onclick = submitJoin;
