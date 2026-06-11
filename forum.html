@@ -794,12 +794,17 @@ async function openTopic(id){
   const t = data.topic;
   $("topicTitle").innerHTML = (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
 
-  // moderation row
+  // topic actions row: edit-title (author or moderator+) + moderation (moderator+)
   const mod = $("topicMod"); mod.innerHTML = "";
+  const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
+  let modHtml = "";
+  if (canEditTitle) modHtml += `<button class="btn btn-light btn-sm" id="editTitleBtn">✎ ערוך כותרת</button>`;
+  if (atLeast("moderator"))
+    modHtml += `<button class="btn btn-light btn-sm" id="lockBtn">${t.is_locked?"בטל נעילה":"נעל"}</button>` +
+               `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
+  mod.innerHTML = modHtml;
+  if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
   if (atLeast("moderator")){
-    mod.innerHTML =
-      `<button class="btn btn-light btn-sm" id="lockBtn">${t.is_locked?"בטל נעילה":"נעל"}</button>` +
-      `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
     $("lockBtn").onclick = () => modLock(id, !t.is_locked);
     $("delTopicBtn").onclick = () => modDeleteTopic(id);
   }
@@ -1022,6 +1027,16 @@ async function saveEdit(){
 // ====== moderation / admin ======
 async function modLock(id, locked){
   try{ await api(`/topics/${id}/lock`, { method:"PATCH", body:{ locked }}); openTopic(id); }
+  catch(e){ flash(e.message, "err"); }
+}
+async function editTitle(id, current){
+  const r = await openModal({ title:"עריכת כותרת הנושא",
+    bodyHTML:`<input class="in" data-field="title" maxlength="300" value="${esc(current)}">`,
+    okText:"שמור" });
+  if (!r) return;
+  const title = (r.title || "").trim();
+  if (!title) return flash("הכותרת ריקה.", "err");
+  try{ await api(`/topics/${id}`, { method:"PATCH", body:{ title }}); openTopic(id); }
   catch(e){ flash(e.message, "err"); }
 }
 async function modDeleteTopic(id){
