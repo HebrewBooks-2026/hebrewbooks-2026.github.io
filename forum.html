@@ -171,6 +171,29 @@
   .req-row:last-child{border-bottom:0}
   .req-meta{color:var(--muted);font-size:.86rem;margin-top:2px}
   .req-reason{color:var(--ink);margin:8px 0 10px;white-space:pre-wrap}
+
+  /* list controls: sort selector + pin marker */
+  .head-tools{display:flex;align-items:center;gap:10px}
+  .sort-sel{width:auto;padding:8px 12px;font-weight:600;font-size:.9rem}
+  .pin{color:var(--gold)}
+  /* notification badge on the "בקשות" button */
+  .req-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;
+    margin-inline-start:5px;border-radius:999px;background:var(--danger);color:#fff;
+    font-size:.72rem;font-weight:800;line-height:1}
+  .req-badge.hidden{display:none}
+  /* user-management: filters + table */
+  .users-filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .users-filters .in{padding:9px 12px}
+  .users-filters input.in{flex:1;min-width:140px}
+  .users-filters select.in{flex:0 0 auto;width:auto;font-weight:600}
+  table.users-tbl{width:100%;border-collapse:collapse;font-size:.9rem}
+  table.users-tbl th,table.users-tbl td{text-align:right;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.users-tbl th{font-size:.76rem;color:var(--muted);font-weight:700;letter-spacing:.04em;
+    position:sticky;top:0;background:#fff;z-index:1}
+  table.users-tbl tr:last-child td{border-bottom:0}
+  table.users-tbl .u-name{font-weight:800}
+  table.users-tbl .u-sub{color:var(--muted);font-size:.82rem}
+  table.users-tbl .u-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
@@ -201,7 +224,14 @@
     <div>
       <div class="panel-head">
         <h1 id="listTitle">נושאים</h1>
-        <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
+        <div class="head-tools">
+          <select id="sortSel" class="in sort-sel" title="סדר הנושאים">
+            <option value="new">החדש ביותר</option>
+            <option value="old">הישן ביותר</option>
+            <option value="alpha">לפי א־ב</option>
+          </select>
+          <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
+        </div>
       </div>
       <div id="topics" class="card"></div>
     </div>
@@ -342,9 +372,26 @@
 
 <!-- admin: manage all users -->
 <div id="usersOverlay" class="modal-overlay hidden">
-  <div class="modal" role="dialog" aria-modal="true" style="max-width:680px">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:760px">
     <h2>ניהול משתמשים</h2>
-    <div id="usersList" class="modal-body" style="max-height:62vh;overflow:auto"></div>
+    <div class="users-filters">
+      <input id="usrSearch" class="in" type="search" placeholder="חיפוש לפי כינוי / שם / אימייל…">
+      <select id="usrStatusFilter" class="in" title="סינון לפי סטטוס">
+        <option value="">כל הסטטוסים</option>
+        <option value="pending">ממתין לאישור</option>
+        <option value="approved">מאושר</option>
+        <option value="rejected">נדחה</option>
+        <option value="incomplete">לא הושלם</option>
+        <option value="blocked">חסום</option>
+      </select>
+      <select id="usrRoleFilter" class="in" title="סינון לפי תפקיד">
+        <option value="">כל התפקידים</option>
+        <option value="member">חבר</option>
+        <option value="moderator">מודרטור</option>
+        <option value="admin">מנהל</option>
+      </select>
+    </div>
+    <div id="usersList" class="modal-body" style="max-height:60vh;overflow:auto"></div>
     <div class="modal-actions"><button id="usersClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
@@ -360,6 +407,8 @@ let cats = [];            // categories
 let activeCat = null;     // selected category id (null = all)
 let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
+let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
+let allUsers = [];        // admin user-management cache (filtered client-side)
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -551,13 +600,13 @@ function renderAuth(){
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
     const adminBtns = atLeast("admin")
       ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים</button>` +
-        ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות</button>`
+        ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות<span id="reqBadge" class="req-badge hidden">0</span></button>`
       : "";
     slot.innerHTML =
       `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + adminBtns +
       ` <button class="btn btn-ghost btn-sm" id="logoutBtn">יציאה</button>`;
     $("logoutBtn").onclick = logout;
-    if (atLeast("admin")){ $("reqBtn").onclick = openRequests; $("usersBtn").onclick = openUsers; }
+    if (atLeast("admin")){ $("reqBtn").onclick = openRequests; $("usersBtn").onclick = openUsers; refreshReqBadge(); }
   } else {
     slot.innerHTML = `<button class="btn btn-gold btn-sm" id="loginBtn">התחברות</button>`;
     $("loginBtn").onclick = openAuth;
@@ -681,7 +730,18 @@ async function decideReq(id, approve){
     await api(`/users/${id}/${approve ? "approve" : "reject"}`, { method:"POST" });
     flash(approve ? "המשתמש אושר." : "הבקשה נדחתה.", "ok");
     renderRequests((await api("/admin/requests")).requests);
+    refreshReqBadge();
   } catch(e){ flash(e.message, "err"); }
+}
+// Red count badge on the "בקשות" button so the admin sees new join requests at a glance.
+async function refreshReqBadge(){
+  const badge = $("reqBadge");
+  if (!badge || !atLeast("admin")) return;
+  try{
+    const n = (await api("/admin/requests")).requests.length;
+    badge.textContent = n;
+    badge.classList.toggle("hidden", n === 0);
+  } catch { badge.classList.add("hidden"); }
 }
 
 // ---- admin: manage all users ----
@@ -694,14 +754,29 @@ async function openUsers(){
 }
 function closeUsers(){ $("usersOverlay").classList.add("hidden"); }
 async function reloadUsers(){
-  try{ renderUsers((await api("/admin/users")).users); }
+  try{ allUsers = (await api("/admin/users")).users; renderUsers(); }
   catch(e){ $("usersList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
-function renderUsers(list){
-  if (!list.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים.</div>`; return; }
-  $("usersList").innerHTML = list.map(u => {
+// Client-side filter over the cached user list (search box + status/role dropdowns).
+function filteredUsers(){
+  const q = ($("usrSearch").value || "").trim().toLowerCase();
+  const st = $("usrStatusFilter").value;
+  const role = $("usrRoleFilter").value;
+  return allUsers.filter(u => {
+    if (st === "blocked"){ if (!u.is_blocked) return false; }
+    else if (st && u.status !== st) return false;
+    if (role && u.role !== role) return false;
+    if (q && !`${u.display_name||""} ${u.full_name||""} ${u.email||""}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderUsers(){
+  if (!allUsers.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים.</div>`; return; }
+  const list = filteredUsers();
+  if (!list.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים התואמים לסינון.</div>`; return; }
+  const rows = list.map(u => {
     const self = me && u.id === me.id;
-    const roleSel = `<select class="in usr-role" data-id="${u.id}" ${self?"disabled":""} style="width:auto;padding:6px 10px">` +
+    const roleSel = `<select class="in usr-role" data-id="${u.id}" ${self?"disabled":""} style="width:auto;padding:5px 8px">` +
       ["member","moderator","admin"].map(r => `<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABEL[r]}</option>`).join("") +
       `</select>`;
     let actions = "";
@@ -712,12 +787,17 @@ function renderUsers(list){
     if (!self)
       actions += `<button class="btn btn-light btn-sm" data-block="${u.id}" data-blocked="${u.is_blocked?1:0}">${u.is_blocked?"בטל חסימה":"חסום"}</button>`;
     const blockedTag = u.is_blocked ? ` <span class="role-tag" style="background:#fbeeeb;color:var(--danger)">חסום</span>` : "";
-    return `<div class="req-row">
-      <div><b>${esc(u.display_name)}</b>${self?' <span class="req-meta">(אתה)</span>':''}${blockedTag}</div>
-      <div class="req-meta">${esc(u.full_name||"")} · ${esc(u.email)} · ${STATUS_LABEL[u.status]||esc(u.status)}</div>
-      <div class="post-actions" style="align-items:center">${roleSel}${actions}</div>
-    </div>`;
+    return `<tr>
+      <td><div class="u-name">${esc(u.display_name)}${self?' <span class="u-sub">(אתה)</span>':''}</div>
+          <div class="u-sub">${esc(u.full_name||"")}</div></td>
+      <td class="u-sub">${esc(u.email)}</td>
+      <td>${STATUS_LABEL[u.status]||esc(u.status)}${blockedTag}</td>
+      <td><div class="u-acts">${roleSel}${actions}</div></td>
+    </tr>`;
   }).join("");
+  $("usersList").innerHTML =
+    `<table class="users-tbl"><thead><tr><th>משתמש</th><th>אימייל</th><th>סטטוס</th><th>פעולות</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
   $("usersList").querySelectorAll(".usr-role").forEach(sel => sel.onchange = () => changeRole(sel.dataset.id, sel.value));
   $("usersList").querySelectorAll("[data-block]").forEach(el => el.onclick = () => toggleBlock(el.dataset.block, el.dataset.blocked === "0"));
   $("usersList").querySelectorAll("[data-approve]").forEach(el => el.onclick = () => decideUser(el.dataset.approve, true));
@@ -733,7 +813,7 @@ async function toggleBlock(id, blocked){
   catch(e){ flash(e.message, "err"); }
 }
 async function decideUser(id, approve){
-  try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST" }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); }
+  try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST" }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); refreshReqBadge(); }
   catch(e){ flash(e.message, "err"); }
 }
 
@@ -768,8 +848,10 @@ async function loadCategories(){
 }
 
 async function loadTopics(){
-  const q = activeCat ? `?category=${activeCat}` : "";
-  const data = await api("/topics" + q);
+  const p = new URLSearchParams();
+  if (activeCat) p.set("category", activeCat);
+  p.set("sort", sortMode);
+  const data = await api("/topics?" + p.toString());
   const box = $("topics");
   if (!data.topics.length){
     box.innerHTML = `<div class="empty">אין עדיין נושאים כאן.${me ? " פתח את הראשון!" : ""}</div>`;
@@ -778,7 +860,7 @@ async function loadTopics(){
   box.innerHTML = data.topics.map(t => `
     <div class="topic-row" data-id="${t.id}">
       <div>
-        <div class="t-title">${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}</div>
+        <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}</div>
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
@@ -790,20 +872,26 @@ async function loadTopics(){
 // ====== single topic ======
 async function openTopic(id){
   curTopicId = id;
+  // Reflect the open topic in the URL so it can be shared / deep-linked (#topic=<id>).
+  if (location.hash !== "#topic=" + id) history.replaceState(null, "", "#topic=" + id);
   const data = await api("/topics/" + id);
   const t = data.topic;
-  $("topicTitle").innerHTML = (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
+  $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
 
-  // topic actions row: edit-title (author or moderator+) + moderation (moderator+)
+  // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
   const mod = $("topicMod"); mod.innerHTML = "";
   const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
-  let modHtml = "";
+  let modHtml = `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
   if (canEditTitle) modHtml += `<button class="btn btn-light btn-sm" id="editTitleBtn">✎ ערוך כותרת</button>`;
+  if (atLeast("admin"))
+    modHtml += `<button class="btn btn-light btn-sm" id="pinBtn">${t.is_pinned?"בטל נעיצה":"📌 נעץ"}</button>`;
   if (atLeast("moderator"))
     modHtml += `<button class="btn btn-light btn-sm" id="lockBtn">${t.is_locked?"בטל נעילה":"נעל"}</button>` +
                `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
   mod.innerHTML = modHtml;
+  $("shareBtn").onclick = () => shareTopic(id);
   if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
+  if (atLeast("admin")) $("pinBtn").onclick = () => modPin(id, !t.is_pinned);
   if (atLeast("moderator")){
     $("lockBtn").onclick = () => modLock(id, !t.is_locked);
     $("delTopicBtn").onclick = () => modDeleteTopic(id);
@@ -1029,6 +1117,11 @@ async function modLock(id, locked){
   try{ await api(`/topics/${id}/lock`, { method:"PATCH", body:{ locked }}); openTopic(id); }
   catch(e){ flash(e.message, "err"); }
 }
+// Pin/unpin (admin only). Pinned topics float to the top of the list.
+async function modPin(id, pinned){
+  try{ await api(`/topics/${id}/pin`, { method:"PATCH", body:{ pinned }}); flash(pinned?"הנושא ננעץ למעלה.":"הנעיצה בוטלה.","ok"); openTopic(id); }
+  catch(e){ flash(e.message, "err"); }
+}
 async function editTitle(id, current){
   const r = await openModal({ title:"עריכת כותרת הנושא",
     bodyHTML:`<input class="in" data-field="title" maxlength="300" value="${esc(current)}">`,
@@ -1071,7 +1164,33 @@ async function addCategory(){
 }
 
 // ====== navigation ======
-function backToList(){ show("viewList"); loadTopics(); }
+function backToList(){
+  show("viewList");
+  curTopicId = null;
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  loadTopics();
+}
+// Direct link to a topic. #topic=<id> is read on load and on hashchange (back button).
+function topicUrl(id){ return location.origin + location.pathname + "#topic=" + id; }
+async function shareTopic(id){
+  const url = topicUrl(id);
+  try{ await navigator.clipboard.writeText(url); flash("הקישור לנושא הועתק.", "ok"); }
+  catch{
+    // Clipboard API can be blocked (permissions / insecure context) — show it to copy by hand.
+    await openModal({ title:"קישור לנושא",
+      bodyHTML:`<input class="in" value="${esc(url)}" readonly onclick="this.select()" style="direction:ltr">`,
+      okText:"סגור" });
+  }
+}
+function routeFromHash(){
+  const m = location.hash.match(/^#topic=(\d+)/);
+  if (m){
+    const id = parseInt(m[1], 10);
+    if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
+  } else if (!$("viewTopic").classList.contains("hidden")){
+    backToList();
+  }
+}
 
 // ====== init ======
 $("backFromTopic").onclick = backToList;
@@ -1079,6 +1198,18 @@ $("backFromNew").onclick = () => show("viewList");
 $("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
 $("addCatBtn").onclick = addCategory;
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
+
+// topic sort selector (persisted)
+$("sortSel").value = sortMode;
+$("sortSel").onchange = () => { sortMode = $("sortSel").value; localStorage.setItem("forum_sort", sortMode); loadTopics(); };
+
+// user-management filters (re-render from the cached list, no refetch)
+$("usrSearch").oninput = renderUsers;
+$("usrStatusFilter").onchange = renderUsers;
+$("usrRoleFilter").onchange = renderUsers;
+
+// deep-link: react to back/forward and pasted #topic=… links
+window.addEventListener("hashchange", routeFromHash);
 
 // auth modal
 $("auSubmit").onclick = submitAuth;
@@ -1125,7 +1256,7 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
   await refreshMe();
   // Google first-timers (no join form yet) are prompted immediately.
   if (me && me.status === "incomplete") openJoin();
-  try{ await loadCategories(); await loadTopics(); }
+  try{ await loadCategories(); await loadTopics(); routeFromHash(); }
   catch(e){ flash("טעינת הפורום נכשלה: " + e.message, "err"); }
 })();
 </script>
