@@ -866,14 +866,15 @@ async function loadTopics(){
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
-    el.onclick = () => openTopic(parseInt(el.getAttribute("data-id"),10)));
+    el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
 }
 
 // ====== single topic ======
+// Render-only: loads + shows a topic WITHOUT touching history (used by refreshes and
+// by routeFromHash). Use goTopic() for user-initiated navigation that should push a
+// Back-button entry.
 async function openTopic(id){
   curTopicId = id;
-  // Reflect the open topic in the URL so it can be shared / deep-linked (#topic=<id>).
-  if (location.hash !== "#topic=" + id) history.replaceState(null, "", "#topic=" + id);
   const data = await api("/topics/" + id);
   const t = data.topic;
   $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
@@ -964,7 +965,7 @@ async function submitNewTopic(){
     $("newTitle").value = ""; $("newBody").value = ""; setMode($("newBody"), "text");
     flash("הנושא פורסם.", "ok");
     await loadCategories(); await loadTopics();
-    openTopic(r.topic_id);
+    goTopic(r.topic_id);
   } catch(e){ flash(e.message, "err"); }
 }
 async function submitReply(id){
@@ -1134,7 +1135,9 @@ async function editTitle(id, current){
 }
 async function modDeleteTopic(id){
   if (!await confirmDialog("מחיקת נושא", "למחוק את הנושא כולו, כולל כל ההודעות שבו?", "מחק נושא")) return;
-  try{ await api(`/topics/${id}`, { method:"DELETE" }); flash("הנושא נמחק.","ok"); backToList(); }
+  // Replace (not push) the dead topic's history entry so Back won't reopen a 404.
+  try{ await api(`/topics/${id}`, { method:"DELETE" }); flash("הנושא נמחק.","ok");
+       history.replaceState(null, "", location.pathname + location.search); showList(); }
   catch(e){ flash(e.message, "err"); }
 }
 async function staffBlock(uid, name){
@@ -1164,13 +1167,25 @@ async function addCategory(){
 }
 
 // ====== navigation ======
-function backToList(){
+// The URL hash is the route: "" = list, "#topic=<id>" = a topic. User-initiated
+// moves PUSH a history entry (goTopic/goList) so the browser Back button steps
+// through them — list → topicA → topicB, Back → topicA, Back → list. Render-only
+// helpers (showList/openTopic) change no history, so a reply/lock/pin refresh on
+// the page you're already on never adds a duplicate Back step.
+function showList(){
   show("viewList");
   curTopicId = null;
-  if (location.hash) history.replaceState(null, "", location.pathname + location.search);
   loadTopics();
 }
-// Direct link to a topic. #topic=<id> is read on load and on hashchange (back button).
+function goTopic(id){
+  if (location.hash !== "#topic=" + id) history.pushState(null, "", "#topic=" + id);
+  openTopic(id);
+}
+function goList(){
+  if (location.hash) history.pushState(null, "", location.pathname + location.search);
+  showList();
+}
+// Direct link to a topic. #topic=<id> is read on load and on hashchange (Back/Forward).
 function topicUrl(id){ return location.origin + location.pathname + "#topic=" + id; }
 async function shareTopic(id){
   const url = topicUrl(id);
@@ -1182,18 +1197,20 @@ async function shareTopic(id){
       okText:"סגור" });
   }
 }
+// Back/Forward (and the initial load / pasted links) land here: render whatever the
+// current hash says, WITHOUT pushing — the browser already moved through history.
 function routeFromHash(){
   const m = location.hash.match(/^#topic=(\d+)/);
   if (m){
     const id = parseInt(m[1], 10);
     if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
   } else if (!$("viewTopic").classList.contains("hidden")){
-    backToList();
+    showList();
   }
 }
 
 // ====== init ======
-$("backFromTopic").onclick = backToList;
+$("backFromTopic").onclick = goList;
 $("backFromNew").onclick = () => show("viewList");
 $("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
 $("addCatBtn").onclick = addCategory;
