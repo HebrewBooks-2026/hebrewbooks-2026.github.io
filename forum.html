@@ -182,6 +182,8 @@
     font-size:.72rem;font-weight:800;line-height:1}
   .req-badge.hidden{display:none}
   /* user-management: filters + table */
+  .users-summary{color:var(--muted);font-size:.88rem;font-weight:600;margin:0 2px 12px}
+  .users-summary b{color:var(--ink);font-weight:800}
   .users-filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .users-filters .in{padding:9px 12px}
   .users-filters input.in{flex:1;min-width:140px}
@@ -374,6 +376,7 @@
 <div id="usersOverlay" class="modal-overlay hidden">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:760px">
     <h2>ניהול משתמשים</h2>
+    <div id="usersSummary" class="users-summary"></div>
     <div class="users-filters">
       <input id="usrSearch" class="in" type="search" placeholder="חיפוש לפי כינוי / שם / אימייל…">
       <select id="usrStatusFilter" class="in" title="סינון לפי סטטוס">
@@ -770,7 +773,23 @@ function filteredUsers(){
     return true;
   });
 }
+// Count summary above the table: total registered + a breakdown, and the filtered
+// count when a filter is narrowing the view.
+function updateUsersSummary(){
+  const el = $("usersSummary");
+  if (!el) return;
+  const total    = allUsers.length;
+  const approved = allUsers.filter(u => u.status === "approved").length;
+  const pending  = allUsers.filter(u => u.status === "pending").length;
+  const blocked  = allUsers.filter(u => u.is_blocked).length;
+  let html = `סה״כ <b>${total}</b> משתמשים רשומים · מאושרים: <b>${approved}</b> · ממתינים: <b>${pending}</b>`;
+  if (blocked) html += ` · חסומים: <b>${blocked}</b>`;
+  const shown = filteredUsers().length;
+  if (shown !== total) html += ` · מציג כעת: <b>${shown}</b>`;
+  el.innerHTML = html;
+}
 function renderUsers(){
+  updateUsersSummary();
   if (!allUsers.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים.</div>`; return; }
   const list = filteredUsers();
   if (!list.length){ $("usersList").innerHTML = `<div class="empty">אין משתמשים התואמים לסינון.</div>`; return; }
