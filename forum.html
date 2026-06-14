@@ -185,9 +185,11 @@
      The whole header stays pinned (under the top bar) while the topics scroll. The
      parchment background + top padding cover any topic sliding underneath; z-index
      sits under the top bar (40) but above the topic cards. */
-  #viewList .panel-head{align-items:flex-start;position:sticky;top:72px;z-index:30;
+  #viewList .panel-head{display:block;position:sticky;top:72px;z-index:30;
     background:var(--parch);padding-top:16px;padding-bottom:14px;margin-bottom:0;
     box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
+  .head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .topic-search{margin-top:12px}
   .head-right{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
   /* "מיון: <dropdown>" — a quiet, borderless line under the title (not a boxy input) */
   .sort-row{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:.82rem;font-weight:600}
@@ -252,17 +254,20 @@
     </aside>
     <div>
       <div class="panel-head">
-        <div class="head-right">
-          <h1 id="listTitle">כל הנושאים</h1>
-          <label class="sort-row">מיון:
-            <select id="sortSel" class="sort-sel" title="סדר הנושאים">
-              <option value="new">החדש ביותר</option>
-              <option value="old">הישן ביותר</option>
-              <option value="alpha">לפי א־ב</option>
-            </select>
-          </label>
+        <div class="head-top">
+          <div class="head-right">
+            <h1 id="listTitle">כל הנושאים</h1>
+            <label class="sort-row">מיון:
+              <select id="sortSel" class="sort-sel" title="סדר הנושאים">
+                <option value="new">החדש ביותר</option>
+                <option value="old">הישן ביותר</option>
+                <option value="alpha">לפי א־ב</option>
+              </select>
+            </label>
+          </div>
+          <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
         </div>
-        <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
+        <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש נושאים…" autocomplete="off">
       </div>
       <div id="topics" class="card"></div>
     </div>
@@ -441,6 +446,8 @@ let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
 let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
 let allUsers = [];        // admin user-management cache (filtered client-side)
+let searchQuery = "";     // topic search term (matched server-side on title + posts)
+let searchTimer = null;   // debounce handle for the search box
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -895,8 +902,9 @@ async function loadCategories(){
   $("newCat").innerHTML = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
 }
 
-// The list heading reflects the chosen category (or "כל הנושאים" for the All view).
+// The list heading reflects the search term, the chosen category, or "כל הנושאים".
 function updateListTitle(){
+  if (searchQuery){ $("listTitle").textContent = `תוצאות חיפוש: "${searchQuery}"`; return; }
   const cat = activeCat ? cats.find(c => c.id === activeCat) : null;
   $("listTitle").textContent = cat ? cat.name : "כל הנושאים";
 }
@@ -905,10 +913,13 @@ async function loadTopics(){
   const p = new URLSearchParams();
   if (activeCat) p.set("category", activeCat);
   p.set("sort", sortMode);
+  if (searchQuery) p.set("q", searchQuery);
   const data = await api("/topics?" + p.toString());
   const box = $("topics");
   if (!data.topics.length){
-    box.innerHTML = `<div class="empty">אין עדיין נושאים כאן.${me ? " פתח את הראשון!" : ""}</div>`;
+    box.innerHTML = `<div class="empty">${searchQuery
+      ? "לא נמצאו נושאים התואמים לחיפוש."
+      : ("אין עדיין נושאים כאן." + (me ? " פתח את הראשון!" : ""))}</div>`;
     return;
   }
   box.innerHTML = data.topics.map(t => `
@@ -1273,6 +1284,17 @@ $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 // topic sort selector (persisted)
 $("sortSel").value = sortMode;
 $("sortSel").onchange = () => { sortMode = $("sortSel").value; localStorage.setItem("forum_sort", sortMode); loadTopics(); };
+
+// topic search (server-side; debounced so we don't hit the API on every keystroke)
+$("topicSearch").oninput = () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const v = $("topicSearch").value.trim();
+    if (v === searchQuery) return;
+    searchQuery = v;
+    loadTopics();
+  }, 300);
+};
 
 // user-management filters (re-render from the cached list, no refetch)
 $("usrSearch").oninput = renderUsers;
