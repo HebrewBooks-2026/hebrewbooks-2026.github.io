@@ -175,10 +175,11 @@
   /* list controls: sort selector + pin marker */
   .head-tools{display:flex;align-items:center;gap:10px}
   .sort-sel{width:auto;padding:8px 12px;font-weight:600;font-size:.9rem}
-  /* soften the "+ נושא חדש" button: pill shape, slimmer, lighter shadow, aligned
-     to the height of the sort select beside it (was a chunky square block). */
-  #newTopicBtn{border-radius:999px;padding:8px 18px;font-size:.9rem;font-weight:700;
-    box-shadow:0 4px 14px rgba(202,162,74,.32)}
+  /* "+ נושא חדש": gold OUTLINE (transparent fill, thin gold border, gold text, no
+     shadow) — light and elegant instead of the heavy solid-gold block. */
+  #newTopicBtn{background:transparent;color:#8a6a1c;border:1.5px solid var(--gold);
+    border-radius:999px;padding:7px 16px;font-size:.9rem;font-weight:700;box-shadow:none}
+  #newTopicBtn:hover{background:rgba(202,162,74,.12);color:#6f5413}
   .pin{color:var(--gold)}
   /* notification badge on the "בקשות" button */
   .req-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;
