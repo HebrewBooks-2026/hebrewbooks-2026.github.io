@@ -247,7 +247,7 @@
 <header class="bar">
   <div class="wrap">
     <nav class="nav">
-      <a href="index.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
+      <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
@@ -1373,6 +1373,9 @@ $("topicSearch").oninput = () => {
 $("usrSearch").oninput = renderUsers;
 $("usrStatusFilter").onchange = renderUsers;
 $("usrRoleFilter").onchange = renderUsers;
+
+// clicking the forum title returns to the forum home (the topics list), not a reload
+document.querySelector(".brand").onclick = (e) => { e.preventDefault(); goList(); };
 
 // deep-link: react to back/forward and pasted #topic=… links
 window.addEventListener("hashchange", routeFromHash);
