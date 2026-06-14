@@ -24,7 +24,10 @@
   a{color:inherit;text-decoration:none}
 
   /* ---- top bar ---- */
+  /* sticky so it stays put while topics scroll. z-index stays UNDER the modals (50)
+     so dialog overlays still cover it. */
   header.bar{
+    position:sticky;top:0;z-index:40;
     color:#f3eede;
     background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 60%,#26406e 100%);
     box-shadow:var(--shadow);
@@ -63,8 +66,11 @@
   .msg.err{background:#fbeeeb;color:var(--danger);border:1px solid #e7c4bb}
   .msg.ok{background:#e9f5ee;color:var(--ok);border:1px solid #bfe0cb}
 
-  .layout{display:grid;grid-template-columns:230px 1fr;gap:24px}
-  @media(max-width:760px){.layout{grid-template-columns:1fr}}
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start}
+  /* categories pane stays in view while the topics column scrolls (offset below the
+     sticky header). align-self:start keeps it from stretching so sticky can engage. */
+  .side{position:sticky;top:88px;align-self:start;max-height:calc(100vh - 108px);overflow:auto}
+  @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible}}
 
   .side h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
   .cat{display:flex;align-items:center;justify-content:space-between;gap:8px;
