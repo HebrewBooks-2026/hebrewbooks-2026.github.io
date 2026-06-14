@@ -900,26 +900,49 @@ function consumeHash(){
 }
 
 // ====== "מה חדש" changelog (left column) ======
-// Reads site/changelog.json (same origin) and lists app versions newest-first.
-// Add an entry there on each release — no code change needed.
+// FULLY AUTOMATIC: reads the published GitHub Releases of the app's release repo.
+// Each `publish.ps1` run creates a release whose notes come from CHANGELOG.md, so a
+// new version appears here on its own — no file to maintain. We use the GitHub REST
+// API (api.github.com) because it sends CORS headers and passes NetFree; the raw
+// release-asset download does NOT (CORS-blocked), so we must NOT fetch the asset.
+const RELEASES_API = "https://api.github.com/repos/HebrewBooks-2026/Hebrewbooks-Releases/releases?per_page=30";
 function clDate(d){
-  try{ return new Date(d + "T00:00:00").toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
-  catch{ return d || ""; }
+  try{ return new Date(d).toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
+  catch{ return ""; }
+}
+// Turn a release body (Markdown bullet list) into short summary lines: prefer the
+// bold "**…**" lead of each bullet (a concise headline), trimming the trailing colon.
+function parseReleaseItems(body){
+  const out = [];
+  for (let line of String(body || "").replace(/^﻿/, "").split(/\r?\n/)){
+    line = line.trim().replace(/^[-*]\s+/, "");
+    if (!line) continue;
+    const bold = line.match(/\*\*(.+?)\*\*/);
+    let item = (bold ? bold[1] : line.replace(/\*\*/g, "")).replace(/[:：]\s*$/, "").trim();
+    if (item) out.push(item);
+  }
+  return out;
 }
 async function loadChangelog(){
   const box = $("changelog");
   if (!box) return;
+  box.innerHTML = `<div class="empty" style="padding:14px">טוען…</div>`;
   try{
-    const res = await fetch("changelog.json", { cache: "no-cache" });
-    if (!res.ok) throw new Error("no changelog");
-    const versions = (await res.json()).versions || [];
-    if (!versions.length){ box.innerHTML = `<div class="empty" style="padding:14px">אין עדכונים עדיין.</div>`; return; }
-    box.innerHTML = versions.map(v => `
-      <div class="cl-item">
-        <div class="cl-ver">גרסה ${esc(v.version)}</div>
-        ${v.date ? `<div class="cl-date">${esc(clDate(v.date))}</div>` : ""}
-        <ul class="cl-list">${(v.items || []).map(it => `<li>${esc(it)}</li>`).join("")}</ul>
-      </div>`).join("");
+    const res = await fetch(RELEASES_API, { headers: { "Accept": "application/vnd.github+json" } });
+    if (!res.ok) throw new Error("releases " + res.status);
+    const rels = (await res.json())
+      .filter(r => !r.prerelease && r.tag_name !== "prerequisites" && !/prerequisite/i.test(r.name || ""))
+      .slice(0, 12);
+    if (!rels.length){ box.innerHTML = ""; return; }
+    box.innerHTML = rels.map(r => {
+      const ver = String(r.tag_name || "").replace(/^v/, "") || String(r.name || "");
+      const items = parseReleaseItems(r.body);
+      return `<div class="cl-item">
+        <div class="cl-ver">גרסה ${esc(ver)}</div>
+        <div class="cl-date">${esc(clDate(r.published_at))}</div>
+        ${items.length ? `<ul class="cl-list">${items.map(it => `<li>${esc(it)}</li>`).join("")}</ul>` : ""}
+      </div>`;
+    }).join("");
   } catch { box.innerHTML = ""; } // fail quietly — the column just stays empty
 }
 
