@@ -70,7 +70,13 @@
   .layout{display:grid;grid-template-columns:230px 1fr 250px;gap:24px;align-items:start}
   /* side panes stay in view while the topics column scrolls (offset below the sticky
      header). align-self:start keeps them from stretching so sticky can engage. */
-  .side,.news{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px);overflow:auto}
+  .side,.news{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px)}
+  .side{overflow:auto}
+  /* news: a flex column so the "מה חדש" heading stays pinned and only the list
+     scrolls; a divider line on the side facing the topics separates the two. */
+  .news{display:flex;flex-direction:column;border-inline-start:1px solid var(--line);padding-inline-start:22px}
+  .news h3{flex:0 0 auto}
+  #changelog{flex:1 1 auto;min-height:0;overflow:auto}
   /* drop the news column when there isn't room for 3 columns, then collapse to 1 */
   @media(max-width:920px){.layout{grid-template-columns:230px 1fr}.news{display:none}}
   @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible;padding-top:0}}
