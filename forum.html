@@ -172,17 +172,21 @@
   .req-meta{color:var(--muted);font-size:.86rem;margin-top:2px}
   .req-reason{color:var(--ink);margin:8px 0 10px;white-space:pre-wrap}
 
-  /* list controls: title + delicate sort on the right, new-topic button on the left */
-  .head-right{display:flex;align-items:center;gap:10px}
-  /* sort: a quiet, borderless text dropdown next to the title (not a boxy input) */
+  /* list controls: title with the sort stacked UNDER it (right), button on the left */
+  #viewList .panel-head{align-items:flex-start}
+  .head-right{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+  /* "מיון: <dropdown>" — a quiet, borderless line under the title (not a boxy input) */
+  .sort-row{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:.82rem;font-weight:600}
   .sort-sel{width:auto;border:0;background:transparent;color:var(--muted);
     font-family:inherit;font-size:.82rem;font-weight:600;padding:2px 2px;cursor:pointer}
   .sort-sel:hover{color:var(--ink)}
   .sort-sel:focus{outline:0}
   /* "+ נושא חדש": gold OUTLINE (transparent fill, thin gold border, gold text, no
-     shadow) — light and elegant instead of the heavy solid-gold block. */
+     shadow) — light and elegant instead of the heavy solid-gold block. Nudged down
+     so there's a little breathing room above it. */
   #newTopicBtn{background:transparent;color:#8a6a1c;border:1.5px solid var(--gold);
-    border-radius:999px;padding:8px 18px;font-size:.92rem;font-weight:700;box-shadow:none;white-space:nowrap}
+    border-radius:999px;padding:8px 18px;font-size:.92rem;font-weight:700;box-shadow:none;
+    white-space:nowrap;margin-top:8px}
   #newTopicBtn:hover{background:rgba(202,162,74,.12);color:#6f5413}
   .pin{color:var(--gold)}
   /* notification badge on the "בקשות" button */
@@ -236,11 +240,13 @@
       <div class="panel-head">
         <div class="head-right">
           <h1 id="listTitle">נושאים</h1>
-          <select id="sortSel" class="sort-sel" title="סדר הנושאים">
-            <option value="new">החדש ביותר</option>
-            <option value="old">הישן ביותר</option>
-            <option value="alpha">לפי א־ב</option>
-          </select>
+          <label class="sort-row">מיון:
+            <select id="sortSel" class="sort-sel" title="סדר הנושאים">
+              <option value="new">החדש ביותר</option>
+              <option value="old">הישן ביותר</option>
+              <option value="alpha">לפי א־ב</option>
+            </select>
+          </label>
         </div>
         <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
       </div>
