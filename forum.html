@@ -69,8 +69,8 @@
   .layout{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start}
   /* categories pane stays in view while the topics column scrolls (offset below the
      sticky header). align-self:start keeps it from stretching so sticky can engage. */
-  .side{position:sticky;top:88px;align-self:start;max-height:calc(100vh - 108px);overflow:auto}
-  @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible}}
+  .side{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px);overflow:auto}
+  @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible;padding-top:0}}
 
   .side h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
   .cat{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -181,8 +181,13 @@
   .req-meta{color:var(--muted);font-size:.86rem;margin-top:2px}
   .req-reason{color:var(--ink);margin:8px 0 10px;white-space:pre-wrap}
 
-  /* list controls: title with the sort stacked UNDER it (right), button on the left */
-  #viewList .panel-head{align-items:flex-start}
+  /* list controls: title with the sort stacked UNDER it (right), button on the left.
+     The whole header stays pinned (under the top bar) while the topics scroll. The
+     parchment background + top padding cover any topic sliding underneath; z-index
+     sits under the top bar (40) but above the topic cards. */
+  #viewList .panel-head{align-items:flex-start;position:sticky;top:72px;z-index:30;
+    background:var(--parch);padding-top:16px;padding-bottom:14px;margin-bottom:0;
+    box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
   .head-right{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
   /* "מיון: <dropdown>" — a quiet, borderless line under the title (not a boxy input) */
   .sort-row{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:.82rem;font-weight:600}
@@ -248,7 +253,7 @@
     <div>
       <div class="panel-head">
         <div class="head-right">
-          <h1 id="listTitle">נושאים</h1>
+          <h1 id="listTitle">כל הנושאים</h1>
           <label class="sort-row">מיון:
             <select id="sortSel" class="sort-sel" title="סדר הנושאים">
               <option value="new">החדש ביותר</option>
@@ -890,7 +895,13 @@ async function loadCategories(){
   $("newCat").innerHTML = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
 }
 
+// The list heading reflects the chosen category (or "כל הנושאים" for the All view).
+function updateListTitle(){
+  const cat = activeCat ? cats.find(c => c.id === activeCat) : null;
+  $("listTitle").textContent = cat ? cat.name : "כל הנושאים";
+}
 async function loadTopics(){
+  updateListTitle();
   const p = new URLSearchParams();
   if (activeCat) p.set("category", activeCat);
   p.set("sort", sortMode);
