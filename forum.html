@@ -66,13 +66,22 @@
   .msg.err{background:#fbeeeb;color:var(--danger);border:1px solid #e7c4bb}
   .msg.ok{background:#e9f5ee;color:var(--ok);border:1px solid #bfe0cb}
 
-  .layout{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start}
-  /* categories pane stays in view while the topics column scrolls (offset below the
-     sticky header). align-self:start keeps it from stretching so sticky can engage. */
-  .side{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px);overflow:auto}
+  /* 3 columns (RTL): categories (right) · topics (center) · "מה חדש" (left) */
+  .layout{display:grid;grid-template-columns:230px 1fr 250px;gap:24px;align-items:start}
+  /* side panes stay in view while the topics column scrolls (offset below the sticky
+     header). align-self:start keeps them from stretching so sticky can engage. */
+  .side,.news{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px);overflow:auto}
+  /* drop the news column when there isn't room for 3 columns, then collapse to 1 */
+  @media(max-width:920px){.layout{grid-template-columns:230px 1fr}.news{display:none}}
   @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible;padding-top:0}}
 
-  .side h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
+  .side h3,.news h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
+  /* "מה חדש" version entries */
+  .cl-item{padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:10px}
+  .cl-ver{font-weight:800;color:var(--navy);font-size:.96rem}
+  .cl-date{color:var(--muted);font-size:.74rem;margin:1px 0 6px}
+  .cl-list{margin:0;padding-inline-start:1.1em;font-size:.83rem;color:var(--ink);line-height:1.5}
+  .cl-list li{margin:.18em 0}
   .cat{display:flex;align-items:center;justify-content:space-between;gap:8px;
     padding:10px 13px;border-radius:11px;cursor:pointer;font-weight:600;color:var(--ink);border:1px solid transparent}
   .cat:hover{background:#fff;border-color:var(--line)}
@@ -189,7 +198,7 @@
     background:var(--parch);padding-top:16px;padding-bottom:14px;margin-bottom:0;
     box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
   .head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-  .topic-search{margin-top:12px}
+  .topic-search{margin-top:12px;max-width:300px;padding:7px 12px;font-size:.86rem}
   .head-right{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
   /* "מיון: <dropdown>" — a quiet, borderless line under the title (not a boxy input) */
   .sort-row{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:.82rem;font-weight:600}
@@ -271,6 +280,10 @@
       </div>
       <div id="topics" class="card"></div>
     </div>
+    <aside class="news">
+      <h3>מה חדש בגרסאות</h3>
+      <div id="changelog"></div>
+    </aside>
   </section>
 
   <!-- ===== single topic view ===== -->
@@ -886,6 +899,30 @@ function consumeHash(){
   }
 }
 
+// ====== "מה חדש" changelog (left column) ======
+// Reads site/changelog.json (same origin) and lists app versions newest-first.
+// Add an entry there on each release — no code change needed.
+function clDate(d){
+  try{ return new Date(d + "T00:00:00").toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
+  catch{ return d || ""; }
+}
+async function loadChangelog(){
+  const box = $("changelog");
+  if (!box) return;
+  try{
+    const res = await fetch("changelog.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error("no changelog");
+    const versions = (await res.json()).versions || [];
+    if (!versions.length){ box.innerHTML = `<div class="empty" style="padding:14px">אין עדכונים עדיין.</div>`; return; }
+    box.innerHTML = versions.map(v => `
+      <div class="cl-item">
+        <div class="cl-ver">גרסה ${esc(v.version)}</div>
+        ${v.date ? `<div class="cl-date">${esc(clDate(v.date))}</div>` : ""}
+        <ul class="cl-list">${(v.items || []).map(it => `<li>${esc(it)}</li>`).join("")}</ul>
+      </div>`).join("");
+  } catch { box.innerHTML = ""; } // fail quietly — the column just stays empty
+}
+
 // ====== categories + topics ======
 async function loadCategories(){
   cats = (await api("/categories")).categories;
@@ -1349,6 +1386,7 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
   await refreshMe();
   // Google first-timers (no join form yet) are prompted immediately.
   if (me && me.status === "incomplete") openJoin();
+  loadChangelog();
   try{ await loadCategories(); await loadTopics(); routeFromHash(); }
   catch(e){ flash("טעינת הפורום נכשלה: " + e.message, "err"); }
 })();
