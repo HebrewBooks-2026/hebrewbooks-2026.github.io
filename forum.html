@@ -685,9 +685,10 @@ function updateStatusBanner(){
   else if (me.status === "pending")
     el.innerHTML = `<span>בקשת ההצטרפות שלך התקבלה וממתינה לאישור מנהל. בינתיים ניתן לקרוא בלבד.</span>`;
   else if (me.status === "rejected")
-    el.innerHTML = `<span>בקשת ההצטרפות שלך נדחתה. לפרטים ניתן לפנות למנהל.</span>`;
+    el.innerHTML = `<span>בקשת ההצטרפות שלך נדחתה.${me.reject_reason ? " סיבה: " + esc(me.reject_reason) : ""}</span>` +
+                   `<button class="btn btn-gold btn-sm" id="bannerJoinBtn">הגש בקשה מחדש</button>`;
   el.classList.remove("hidden");
-  if (me.status === "incomplete") $("bannerJoinBtn").onclick = openJoin;
+  if (me.status === "incomplete" || me.status === "rejected") $("bannerJoinBtn").onclick = openJoin;
 }
 
 async function refreshMe(){
@@ -783,9 +784,20 @@ function renderRequests(list){
   $("reqList").querySelectorAll("[data-approve]").forEach(el => el.onclick = () => decideReq(el.dataset.approve, true));
   $("reqList").querySelectorAll("[data-reject]").forEach(el => el.onclick = () => decideReq(el.dataset.reject, false));
 }
+// Reject opens a modal for an optional reason (shown to the applicant). Returns the
+// request body {reason} to send, or null if the admin cancelled.
+async function promptRejectReason(){
+  const r = await openModal({ title:"דחיית בקשה",
+    bodyHTML:`<label class="fld">סיבת הדחייה (תוצג למבקש; לא חובה)</label>` +
+             `<textarea class="in" data-field="reason" style="min-height:90px" placeholder="לדוגמה: נא לציין שם מלא אמיתי ולהגיש שוב."></textarea>`,
+    okText:"דחה", danger:true });
+  return r === null ? null : { reason: (r.reason || "").trim() };
+}
 async function decideReq(id, approve){
+  let body;
+  if (!approve){ body = await promptRejectReason(); if (body === null) return; }
   try{
-    await api(`/users/${id}/${approve ? "approve" : "reject"}`, { method:"POST" });
+    await api(`/users/${id}/${approve ? "approve" : "reject"}`, { method:"POST", body });
     flash(approve ? "המשתמש אושר." : "הבקשה נדחתה.", "ok");
     renderRequests((await api("/admin/requests")).requests);
     refreshReqBadge();
@@ -887,7 +899,9 @@ async function toggleBlock(id, blocked){
   catch(e){ flash(e.message, "err"); }
 }
 async function decideUser(id, approve){
-  try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST" }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); refreshReqBadge(); }
+  let body;
+  if (!approve){ body = await promptRejectReason(); if (body === null) return; }
+  try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST", body }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); refreshReqBadge(); }
   catch(e){ flash(e.message, "err"); }
 }
 
