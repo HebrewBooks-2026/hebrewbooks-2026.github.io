@@ -900,18 +900,16 @@ function consumeHash(){
 }
 
 // ====== "מה חדש" changelog (left column) ======
-// FULLY AUTOMATIC: reads the published GitHub Releases of the app's release repo.
-// Each `publish.ps1` run creates a release whose notes come from CHANGELOG.md, so a
-// new version appears here on its own — no file to maintain. We use the GitHub REST
-// API (api.github.com) because it sends CORS headers and passes NetFree; the raw
-// release-asset download does NOT (CORS-blocked), so we must NOT fetch the asset.
-const RELEASES_API = "https://api.github.com/repos/HebrewBooks-2026/Hebrewbooks-Releases/releases?per_page=30";
+// FULLY AUTOMATIC + FULL HISTORY: the forum Worker serves the app's cumulative
+// CHANGELOG.md (attached to every release; the Worker fetches it server-side and
+// caches it — the raw asset is CORS-blocked from the browser, and GitHub Releases
+// themselves get pruned so the API only shows the last few). Each publish.ps1 release
+// updates this on its own — nothing to maintain here.
 function clDate(d){
   try{ return new Date(d).toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
-  catch{ return ""; }
+  catch{ return d || ""; }
 }
-// Turn a release body (Markdown bullet list) into short summary lines: prefer the
-// bold "**…**" lead of each bullet (a concise headline), trimming the trailing colon.
+// Each bullet -> a short summary line: prefer its bold "**…**" lead, trim trailing colon.
 function parseReleaseItems(body){
   const out = [];
   for (let line of String(body || "").replace(/^﻿/, "").split(/\r?\n/)){
@@ -923,26 +921,35 @@ function parseReleaseItems(body){
   }
   return out;
 }
+// CHANGELOG.md is "## <version> (<date>)" sections, newest first, then bullet notes.
+function parseChangelogMd(md){
+  const versions = [];
+  for (const part of String(md || "").replace(/^﻿/, "").split(/^##\s+/m).slice(1)){
+    const nl = part.indexOf("\n");
+    const head = (nl < 0 ? part : part.slice(0, nl)).trim();
+    const body = nl < 0 ? "" : part.slice(nl + 1);
+    const mh = head.match(/^([0-9][\w.\-]*)\s*(?:\(([^)]+)\))?/);
+    versions.push({ version: mh ? mh[1] : head, date: (mh && mh[2]) ? mh[2] : "", items: parseReleaseItems(body) });
+  }
+  return versions;
+}
 async function loadChangelog(){
   const box = $("changelog");
   if (!box) return;
   box.innerHTML = `<div class="empty" style="padding:14px">טוען…</div>`;
   try{
-    const res = await fetch(RELEASES_API, { headers: { "Accept": "application/vnd.github+json" } });
-    if (!res.ok) throw new Error("releases " + res.status);
-    const rels = (await res.json())
-      .filter(r => !r.prerelease && r.tag_name !== "prerequisites" && !/prerequisite/i.test(r.name || ""))
-      .slice(0, 12);
-    if (!rels.length){ box.innerHTML = ""; return; }
-    box.innerHTML = rels.map(r => {
-      const ver = String(r.tag_name || "").replace(/^v/, "") || String(r.name || "");
-      const items = parseReleaseItems(r.body);
-      return `<div class="cl-item">
-        <div class="cl-ver">גרסה ${esc(ver)}</div>
-        <div class="cl-date">${esc(clDate(r.published_at))}</div>
-        ${items.length ? `<ul class="cl-list">${items.map(it => `<li>${esc(it)}</li>`).join("")}</ul>` : ""}
-      </div>`;
-    }).join("");
+    const res = await fetch(API + "/changelog");
+    if (!res.ok) throw new Error("changelog " + res.status);
+    const versions = parseChangelogMd(await res.text())
+      .filter(v => !v.version.includes("-"))   // skip beta sections
+      .slice(0, 40);
+    if (!versions.length){ box.innerHTML = ""; return; }
+    box.innerHTML = versions.map(v => `
+      <div class="cl-item">
+        <div class="cl-ver">גרסה ${esc(v.version)}</div>
+        ${v.date ? `<div class="cl-date">${esc(clDate(v.date))}</div>` : ""}
+        ${v.items.length ? `<ul class="cl-list">${v.items.map(it => `<li>${esc(it)}</li>`).join("")}</ul>` : ""}
+      </div>`).join("");
   } catch { box.innerHTML = ""; } // fail quietly — the column just stays empty
 }
 
