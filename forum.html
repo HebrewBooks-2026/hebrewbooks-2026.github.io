@@ -1203,17 +1203,27 @@ function makeToolbar(ta){
 function composeBody(ta){
   return ta.dataset.mode === "html" ? HTML_MARK + "\n" + ta.value : ta.value;
 }
-// ---- link insert: asks for URL + optional display text, drops Markdown [text](url) at the cursor ----
+// Replace a fixed [s,e) range (captured before the modal stole focus) with text.
+function replaceRange(ta, s, e, text){
+  ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = s + text.length;
+}
+// ---- link insert: if text is selected it becomes the link's display text, and the
+// link REPLACES that selection; a selected URL pre-fills the address field instead. ----
 async function insertLink(textarea){
-  // pre-fill the URL field if the user already selected a URL in the textarea
-  const sel = textarea.value.slice(textarea.selectionStart ?? 0, textarea.selectionEnd ?? 0).trim();
+  // Capture the selection NOW — opening the modal moves focus off the textarea.
+  const s = textarea.selectionStart ?? textarea.value.length;
+  const e = textarea.selectionEnd ?? textarea.value.length;
+  const sel = textarea.value.slice(s, e).trim();
+  const selIsUrl = /^https?:\/\//i.test(sel);
   const r = await openModal({
     title: "הוספת קישור",
     bodyHTML:
       `<label class="fld">כתובת (URL)</label>` +
-      `<input class="in" data-field="url" placeholder="https://..." value="${esc(/^https?:\/\//i.test(sel) ? sel : "")}" style="margin-bottom:10px">` +
+      `<input class="in" data-field="url" placeholder="https://..." value="${esc(selIsUrl ? sel : "")}" style="margin-bottom:10px">` +
       `<label class="fld">טקסט להצגה (לא חובה)</label>` +
-      `<input class="in" data-field="text" placeholder="הטקסט שיוצג כקישור">`,
+      `<input class="in" data-field="text" placeholder="הטקסט שיוצג כקישור" value="${esc(selIsUrl ? "" : sel)}">`,
     okText: "הוסף קישור" });
   if (!r) return;
   let url = (r.url || "").trim();
@@ -1221,11 +1231,11 @@ async function insertLink(textarea){
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;   // forgive a missing scheme
   const text = (r.text || "").trim();
   // HTML mode -> real <a> tag (sanitized on render); text mode -> Markdown / bare URL
-  if (textarea.dataset.mode === "html"){
-    insertAtCursor(textarea, `<a href="${url}">${text || url}</a>`);
-  } else {
-    insertAtCursor(textarea, text ? `[${text}](${url})` : ` ${url} `);
-  }
+  const snippet = textarea.dataset.mode === "html"
+    ? `<a href="${url}">${text || url}</a>`
+    : (text ? `[${text}](${url})` : ` ${url} `);
+  // Drop it where the words were selected (or at the caret if nothing was selected).
+  replaceRange(textarea, s, e, snippet);
 }
 async function uploadAndInsert(input, textarea){
   const file = input.files && input.files[0];
