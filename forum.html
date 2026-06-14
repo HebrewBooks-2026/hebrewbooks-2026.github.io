@@ -136,6 +136,9 @@
   /* ---- modal dialog (replaces browser prompt/confirm) ---- */
   .modal-overlay{position:fixed;inset:0;background:rgba(21,35,63,.5);backdrop-filter:blur(2px);
     display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  /* the shared openModal dialog (link/color/etc.) is often opened FROM another modal
+     (e.g. the edit-post window) — keep it above all the fixed-purpose overlays */
+  #modalOverlay{z-index:70}
   .modal{background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(21,35,63,.4);
     width:100%;max-width:460px;padding:24px;animation:pop .14s ease}
   @keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
