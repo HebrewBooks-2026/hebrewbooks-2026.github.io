@@ -243,6 +243,11 @@
   table.users-tbl .u-name{font-weight:800}
   table.users-tbl .u-sub{color:var(--muted);font-size:.82rem}
   table.users-tbl .u-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  /* content-policy commitment (registration + join form + compose boxes) */
+  .agree-row{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;line-height:1.45;color:var(--ink);margin-top:2px;cursor:pointer}
+  .agree-row input{margin-top:3px;flex:0 0 auto;width:16px;height:16px;accent-color:var(--gold)}
+  .compose-policy{font-size:.8rem;color:#6b531a;background:#fbf3df;border:1px solid var(--gold-soft);
+    border-radius:9px;padding:8px 11px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -307,6 +312,7 @@
       <form class="compose" id="replyForm">
         <label class="fld">תגובה</label>
         <textarea class="in" id="replyBody" placeholder="כתוב תגובה..." required></textarea>
+        <div class="compose-policy">⚠ בשליחה אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">שלח תגובה</button>
           <button class="btn btn-light" type="button" id="replyImgBtn">🖼 תמונה</button>
@@ -336,6 +342,7 @@
           <label class="fld">תוכן</label>
           <textarea class="in" id="newBody" placeholder="פתח את הדיון..." required></textarea>
         </div>
+        <div class="compose-policy">⚠ בפרסום אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">פרסם נושא</button>
           <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
@@ -377,6 +384,8 @@
       <input id="auEmail" class="in" type="email" placeholder="אימייל" autocomplete="email">
       <input id="auPass" class="in" type="password" placeholder="סיסמה (לפחות 6 תווים)" autocomplete="current-password">
       <textarea id="auReason" class="in hidden" placeholder="מדוע ברצונך להצטרף לפורום?" maxlength="1000" style="min-height:80px"></textarea>
+      <label id="auAgreeRow" class="agree-row hidden"><input type="checkbox" id="auAgree">
+        <span>אני מתחייב/ת שכל תוכן שאכתוב בפורום קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה, ומבין/ה שכתיבת תוכן שאינו קשור תגרור חסימה לצמיתות.</span></label>
     </div>
     <div id="authErr" class="modal-msg hidden" style="color:var(--danger);margin-top:12px"></div>
     <div class="modal-actions" style="margin-top:18px">
@@ -395,6 +404,8 @@
       <input id="jFull" class="in" type="text" placeholder="שם פרטי ומשפחה" maxlength="120">
       <input id="jName" class="in" type="text" placeholder="כינוי (יוצג בפורום)" maxlength="80">
       <textarea id="jReason" class="in" placeholder="מדוע ברצונך להצטרף לפורום?" maxlength="1000" style="min-height:90px"></textarea>
+      <label class="agree-row"><input type="checkbox" id="jAgree">
+        <span>אני מתחייב/ת שכל תוכן שאכתוב בפורום קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה, ומבין/ה שכתיבת תוכן שאינו קשור תגרור חסימה לצמיתות.</span></label>
     </div>
     <div id="joinErr" class="modal-msg hidden" style="color:var(--danger);margin-top:12px"></div>
     <div class="modal-actions" style="margin-top:16px">
@@ -711,6 +722,7 @@ let authMode = "login";
 function openAuth(){
   $("googleBtn").href = API + "/auth/google/start";
   $("auEmail").value = $("auPass").value = $("auName").value = $("auFull").value = $("auReason").value = "";
+  $("auAgree").checked = false;
   setAuthMode("login");
   $("authOverlay").classList.remove("hidden");
   $("auEmail").focus();
@@ -723,15 +735,21 @@ function setAuthMode(mode){
   $("auFull").classList.toggle("hidden", !reg);
   $("auName").classList.toggle("hidden", !reg);
   $("auReason").classList.toggle("hidden", !reg);
+  $("auAgreeRow").classList.toggle("hidden", !reg);
   $("auPass").setAttribute("autocomplete", reg ? "new-password" : "current-password");
   $("auSubmit").textContent = reg ? "שלח בקשה" : "כניסה";
   $("authErr").classList.add("hidden");
 }
 async function submitAuth(){
   const email = $("auEmail").value.trim(), password = $("auPass").value;
+  if (authMode === "register" && !$("auAgree").checked){
+    $("authErr").textContent = "יש לאשר את ההתחייבות לתוכן הפורום כדי להירשם.";
+    $("authErr").classList.remove("hidden");
+    return;
+  }
   const path = authMode === "register" ? "/auth/register" : "/auth/login";
   const body = authMode === "register"
-    ? { email, password, full_name: $("auFull").value.trim(), display_name: $("auName").value.trim(), reason: $("auReason").value.trim() }
+    ? { email, password, full_name: $("auFull").value.trim(), display_name: $("auName").value.trim(), reason: $("auReason").value.trim(), agree: true }
     : { email, password };
   try{
     const r = await api(path, { method:"POST", body });
@@ -749,13 +767,19 @@ function openJoin(){
   $("jFull").value = (me && me.full_name) || "";
   $("jName").value = (me && me.display_name) || "";
   $("jReason").value = (me && me.reason) || "";
+  $("jAgree").checked = false;
   $("joinErr").classList.add("hidden");
   $("joinOverlay").classList.remove("hidden");
   $("jFull").focus();
 }
 function closeJoin(){ $("joinOverlay").classList.add("hidden"); }
 async function submitJoin(){
-  const body = { full_name:$("jFull").value.trim(), display_name:$("jName").value.trim(), reason:$("jReason").value.trim() };
+  if (!$("jAgree").checked){
+    $("joinErr").textContent = "יש לאשר את ההתחייבות לתוכן הפורום כדי להגיש בקשה.";
+    $("joinErr").classList.remove("hidden");
+    return;
+  }
+  const body = { full_name:$("jFull").value.trim(), display_name:$("jName").value.trim(), reason:$("jReason").value.trim(), agree: true };
   try{
     await api("/auth/request", { method:"POST", body });
     closeJoin();
