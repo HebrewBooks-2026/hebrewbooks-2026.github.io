@@ -137,6 +137,10 @@
   .post-body{white-space:pre-wrap;word-break:break-word;font-size:1.04rem}
   .post-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
   .staff-menu{margin-inline-start:auto;display:flex;gap:6px}
+  /* deep-linked post: gold flash + scroll-margin so it clears the sticky header */
+  .post{scroll-margin-top:80px}
+  .post.flash-target{animation:postFlash 2.6s ease-out}
+  @keyframes postFlash{0%,18%{background:rgba(202,162,74,.26);box-shadow:inset 0 0 0 2px var(--gold)}100%{background:transparent;box-shadow:inset 0 0 0 2px transparent}}
 
   form.compose{padding:18px;display:flex;flex-direction:column;gap:12px}
   label.fld{font-weight:700;font-size:.9rem;color:var(--muted)}
@@ -1139,6 +1143,7 @@ async function openTopic(id){
   if (canReply){ setMode($("replyBody"), "text"); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
 
   show("viewTopic");
+  scrollToHashPost();   // honor a "#topic=…&post=…" deep link once the posts are rendered
 }
 
 function renderPosts(posts){
@@ -1157,6 +1162,8 @@ function renderPosts(posts){
     if (mine || atLeast("moderator")){
       actions = `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>` + actions;
     }
+    // permalink — available to everyone, copies a direct link to this post
+    actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
     // staff tools on OTHER users
     let staff = "";
     if (atLeast("moderator") && !mine){
@@ -1165,7 +1172,7 @@ function renderPosts(posts){
     if (atLeast("admin") && !mine){
       staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
     }
-    return `<div class="post">
+    return `<div class="post" id="post-${p.id}">
       <div class="post-head">
         <span class="who">${esc(p.author)}</span>${roleTag}
         <span class="when">${when(p.created_at)}${editedNote}</span>
@@ -1181,6 +1188,7 @@ function renderPosts(posts){
     const id = parseInt(el.getAttribute("data-id"),10);
     if (act === "del")   return deletePost(id);
     if (act === "edit")  return openEdit(id);
+    if (act === "link")  return sharePost(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
@@ -1465,6 +1473,31 @@ async function shareTopic(id){
       okText:"סגור" });
   }
 }
+// Direct link to a single post inside a topic: "#topic=<id>&post=<pid>". The topic
+// part is read by routeFromHash exactly as before (the regex is anchored on #topic=);
+// the &post= suffix is consumed by scrollToHashPost once the posts are on screen.
+function postUrl(topicId, postId){ return location.origin + location.pathname + "#topic=" + topicId + "&post=" + postId; }
+async function sharePost(postId){
+  const url = postUrl(curTopicId, postId);
+  try{ await navigator.clipboard.writeText(url); flash("הקישור לתגובה הועתק.", "ok"); }
+  catch{
+    await openModal({ title:"קישור לתגובה",
+      bodyHTML:`<input class="in" value="${esc(url)}" readonly onclick="this.select()" style="direction:ltr">`,
+      okText:"סגור" });
+  }
+}
+// If the hash carries &post=<id>, bring that post into view and flash it. Safe to call
+// whenever a topic finishes rendering; a no-op when there's no post anchor / no match.
+function scrollToHashPost(){
+  const m = location.hash.match(/[#&]post=(\d+)/);
+  if (!m) return;
+  const el = document.getElementById("post-" + m[1]);
+  if (!el) return;
+  el.scrollIntoView({ behavior:"smooth", block:"center" });
+  el.classList.remove("flash-target"); void el.offsetWidth;  // restart the CSS animation if re-triggered
+  el.classList.add("flash-target");
+}
+
 // Back/Forward (and the initial load / pasted links) land here: render whatever the
 // current hash says, WITHOUT pushing — the browser already moved through history.
 function routeFromHash(){
@@ -1472,6 +1505,7 @@ function routeFromHash(){
   if (m){
     const id = parseInt(m[1], 10);
     if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
+    else scrollToHashPost();   // already on this topic — just jump to the post anchor
   } else if (!$("viewTopic").classList.contains("hidden")){
     showList();
   }
