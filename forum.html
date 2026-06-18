@@ -152,6 +152,7 @@
   .like-n{font-weight:800;min-width:.7em;text-align:center}
   /* accepted-answer: green badge + post highlight; the "mark" button goes green when on */
   .sol-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
+  .follow-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
   .sol-badge{font-size:.74rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:2px 9px}
   .post.solution{background:#f4faf6;border-inline-start:3px solid var(--ok);border-radius:0 11px 11px 0}
   .solved-tag{font-size:.72rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:1px 8px;margin-inline-start:8px;white-space:nowrap}
@@ -264,6 +265,25 @@
     margin-inline-start:5px;border-radius:999px;background:var(--danger);color:#fff;
     font-size:.72rem;font-weight:800;line-height:1}
   .req-badge.hidden{display:none}
+  /* header notification bell */
+  .bell{position:relative;background:transparent;border:0;cursor:pointer;font-size:1.2rem;line-height:1;
+    padding:4px;border-radius:9px;opacity:.92}
+  .bell:hover{opacity:1;background:rgba(255,255,255,.12)}
+  .bell.hidden{display:none}
+  .bell-badge{position:absolute;top:-2px;inset-inline-start:-4px;display:inline-grid;place-items:center;
+    min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;
+    font-size:.68rem;font-weight:800;line-height:1}
+  .bell-badge.hidden{display:none}
+  /* notifications list */
+  .notif{display:flex;gap:10px;align-items:flex-start;padding:11px 8px;border-bottom:1px solid var(--line);
+    cursor:pointer;border-radius:9px}
+  .notif:hover{background:var(--parch)}
+  .notif:last-child{border-bottom:0}
+  .notif.unread{background:#fbf6e8}
+  .notif-ic{font-size:1.05rem;flex:0 0 auto;line-height:1.3}
+  .notif-tx{flex:1 1 auto;min-width:0;font-size:.92rem}
+  .notif-tx b{font-weight:800}
+  .notif-when{color:var(--muted);font-size:.76rem;margin-top:2px}
   /* user-management: filters + table */
   .users-summary{color:var(--muted);font-size:.88rem;font-weight:600;margin:0 2px 12px}
   .users-summary b{color:var(--ink);font-weight:800}
@@ -293,6 +313,7 @@
     <nav class="nav">
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
+        <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
       </div>
@@ -457,6 +478,15 @@
     <h2>בקשות הצטרפות</h2>
     <div id="reqList" class="modal-body"></div>
     <div class="modal-actions"><button id="reqClose" class="btn btn-light" type="button">סגור</button></div>
+  </div>
+</div>
+
+<!-- notifications panel (bell) -->
+<div id="notifOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
+    <h2>התראות</h2>
+    <div id="notifList" class="modal-body"></div>
+    <div class="modal-actions"><button id="notifClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
 
@@ -709,6 +739,8 @@ async function api(path, opts){
 // ====== auth ======
 function renderAuth(){
   const slot = $("authSlot");
+  $("bellBtn").classList.toggle("hidden", !me);   // bell only for signed-in users
+  if (!me) setBell(0);
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
@@ -1154,6 +1186,8 @@ async function openTopic(id){
   const mod = $("topicMod"); mod.innerHTML = "";
   const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
   let modHtml = `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
+  if (canPost())
+    modHtml += `<button class="btn btn-light btn-sm follow-btn ${t.following?'on':''}" id="followBtn">${t.following?"✓ עוקב":"🔔 עקוב"}</button>`;
   if (canEditTitle) modHtml += `<button class="btn btn-light btn-sm" id="editTitleBtn">✎ ערוך כותרת</button>`;
   if (atLeast("admin"))
     modHtml += `<button class="btn btn-light btn-sm" id="pinBtn">${t.is_pinned?"בטל נעיצה":"📌 נעץ"}</button>`;
@@ -1162,6 +1196,7 @@ async function openTopic(id){
                `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
   mod.innerHTML = modHtml;
   $("shareBtn").onclick = () => shareTopic(id);
+  if (canPost()) $("followBtn").onclick = () => toggleFollow(id);
   if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
   if (atLeast("admin")) $("pinBtn").onclick = () => modPin(id, !t.is_pinned);
   if (atLeast("moderator")){
@@ -1258,6 +1293,71 @@ async function markSolution(postId){
     renderPosts(curPosts);
   } catch(e){ flash(e.message, "err"); }
 }
+// Follow/unfollow the open topic — drives whether new replies notify you.
+async function toggleFollow(topicId){
+  try{
+    const r = await api(`/topics/${topicId}/follow`, { method:"POST" });
+    if (curTopic) curTopic.following = r.following ? 1 : 0;
+    const btn = $("followBtn");
+    if (btn){ btn.classList.toggle("on", !!r.following); btn.textContent = r.following ? "✓ עוקב" : "🔔 עקוב"; }
+    flash(r.following ? "אתה עוקב אחרי הנושא." : "המעקב בוטל.", "ok");
+  } catch(e){ flash(e.message, "err"); }
+}
+
+// ---- notifications (header bell) -------------------------------------------
+function setBell(unread){
+  const b = $("bellBadge");
+  if (unread > 0){ b.textContent = unread > 99 ? "99+" : unread; b.classList.remove("hidden"); }
+  else b.classList.add("hidden");
+}
+// Light poll for the unread count (every 60s, only while signed in).
+async function refreshBell(){
+  if (!me) return;
+  try{ const r = await api("/notifications/unread"); setBell(r.unread); } catch{}
+}
+// Human-readable line per notification type.
+function notifText(n){
+  const who = `<b>${esc(n.actor_name || "מישהו")}</b>`;
+  const topic = n.topic_title ? `״${esc(n.topic_title)}״` : "נושא";
+  switch(n.type){
+    case "mention":  return { ic:"@",  html:`${who} הזכיר אותך ב־${topic}` };
+    case "reply":    return { ic:"💬", html:`${who} הגיב ב־${topic}` };
+    case "like":     return { ic:"👍", html:`${who} סימן לייק לתגובה שלך ב־${topic}` };
+    case "solution": return { ic:"✓",  html:`${who} סימן את התגובה שלך כפתרון ב־${topic}` };
+    default:         return { ic:"🔔", html:`${who} · ${topic}` };
+  }
+}
+function renderNotifList(items){
+  const box = $("notifList");
+  if (!items.length){ box.innerHTML = `<div class="empty">אין התראות עדיין.</div>`; return; }
+  box.innerHTML = items.map(n => {
+    const tx = notifText(n);
+    return `<div class="notif ${n.is_read?'':'unread'}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}">
+      <span class="notif-ic">${tx.ic}</span>
+      <span class="notif-tx">${tx.html}<div class="notif-when">${when(n.created_at)}</div></span>
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".notif").forEach(el => el.onclick = () => {
+    const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
+    closeNotifications();
+    if (tid){
+      const hash = "#topic=" + tid + (pid ? "&post=" + pid : "");
+      if (location.hash !== hash) history.pushState(null, "", hash);
+      routeFromHash();                                // opens the topic + scrolls to the post
+    }
+  });
+}
+async function openNotifications(){
+  $("notifOverlay").classList.remove("hidden");
+  $("notifList").innerHTML = `<div class="empty">טוען…</div>`;
+  try{
+    const r = await api("/notifications");
+    renderNotifList(r.notifications);
+    if (r.unread) await api("/notifications/read", { method:"POST" });  // viewing = read
+    setBell(0);
+  } catch(e){ $("notifList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function closeNotifications(){ $("notifOverlay").classList.add("hidden"); }
 
 // ====== writes ======
 async function submitNewTopic(){
@@ -1663,6 +1763,12 @@ $("editCancel").onclick = closeEdit;
 $("editOverlay").onclick = (e) => { if (e.target === $("editOverlay")) closeEdit(); };
 $("editImgBtn").onclick = () => $("editImgInput").click();
 $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBody"));
+// notifications bell
+$("bellBtn").onclick = openNotifications;
+$("notifClose").onclick = closeNotifications;
+$("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
+// keep the unread badge fresh while the tab is open (only polls when signed in)
+setInterval(refreshBell, 60000);
 
 (async function init(){
   consumeHash();
@@ -1675,6 +1781,7 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
     if (token && !boot.user){ token = null; localStorage.removeItem("forum_token"); } // stale token
     me = boot.user || null;
     renderAuth();
+    setBell(boot.unread_notifications || 0);   // seed the bell from the first round-trip
     // Google first-timers (no join form yet) are prompted immediately.
     if (me && me.status === "incomplete") openJoin();
     await loadCategories(boot.categories);
