@@ -146,6 +146,15 @@
   .post{scroll-margin-top:80px}
   .post.flash-target{animation:postFlash 2.6s ease-out}
   @keyframes postFlash{0%,18%{background:rgba(202,162,74,.26);box-shadow:inset 0 0 0 2px var(--gold)}100%{background:transparent;box-shadow:inset 0 0 0 2px transparent}}
+  /* like button: filled gold once the current user has liked it */
+  .like-btn{display:inline-flex;align-items:center;gap:5px}
+  .like-btn.liked{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;border-color:var(--gold)}
+  .like-n{font-weight:800;min-width:.7em;text-align:center}
+  /* accepted-answer: green badge + post highlight; the "mark" button goes green when on */
+  .sol-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
+  .sol-badge{font-size:.74rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:2px 9px}
+  .post.solution{background:#f4faf6;border-inline-start:3px solid var(--ok);border-radius:0 11px 11px 0}
+  .solved-tag{font-size:.72rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:1px 8px;margin-inline-start:8px;white-space:nowrap}
 
   form.compose{padding:18px;display:flex;flex-direction:column;gap:12px}
   label.fld{font-weight:700;font-size:.9rem;color:var(--muted)}
@@ -504,6 +513,7 @@ let cats = [];            // categories
 let activeCat = null;     // selected category id (null = all)
 let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
+let curTopic = null;      // the open topic object (for solution_post_id / author checks)
 let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
 let allUsers = [];        // admin user-management cache (filtered client-side)
 let searchQuery = "";     // topic search term (matched server-side on title + posts)
@@ -1120,7 +1130,7 @@ async function loadTopics(pre){
   box.innerHTML = data.topics.map(t => `
     <div class="topic-row" data-id="${t.id}">
       <div>
-        <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}</div>
+        <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
@@ -1137,6 +1147,7 @@ async function openTopic(id){
   curTopicId = id;
   const data = await api("/topics/" + id);
   const t = data.topic;
+  curTopic = t;
   $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
 
   // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
@@ -1179,15 +1190,21 @@ function renderPosts(posts){
       ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name) ? ` · נערך ע"י ${esc(p.editor_name)}` : " · נערך")
       : "";
     const mine = me && me.id === p.user_id;
+    const isSolution = !!(curTopic && curTopic.solution_post_id === p.id);
+    // the asker (topic author) or a moderator+ may mark/unmark the accepted answer
+    const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
     let actions = "";
+    // like — count is shown to everyone; the click handler deals with sign-in/approval
+    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍 <span class="like-n">${p.like_count||0}</span></button>`;
     if (mine || atLeast("moderator")){
+      actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
       actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
-    }
-    if (mine || atLeast("moderator")){
-      actions = `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>` + actions;
     }
     // permalink — available to everyone, copies a direct link to this post
     actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
+    if (canMarkSolution){
+      actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
+    }
     // staff tools on OTHER users
     let staff = "";
     if (atLeast("moderator") && !mine){
@@ -1196,9 +1213,10 @@ function renderPosts(posts){
     if (atLeast("admin") && !mine){
       staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
     }
-    return `<div class="post" id="post-${p.id}">
+    return `<div class="post${isSolution?' solution':''}" id="post-${p.id}">
       <div class="post-head">
         <span class="who">${esc(p.author)}</span>${roleTag}
+        ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
         <span class="when">${when(p.created_at)}${editedNote}</span>
         ${staff?`<span class="staff-menu">${staff}</span>`:""}
       </div>
@@ -1213,9 +1231,32 @@ function renderPosts(posts){
     if (act === "del")   return deletePost(id);
     if (act === "edit")  return openEdit(id);
     if (act === "link")  return sharePost(id);
+    if (act === "like")  return toggleLike(id);
+    if (act === "solution") return markSolution(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
+}
+
+// ---- interaction: likes + accepted-answer ----------------------------------
+async function toggleLike(postId){
+  if (!me) return openAuth();                       // prompt sign-in instead of a 401
+  if (!canPost()){ flash("רק חברים מאושרים יכולים לסמן לייק.", "err"); return; }
+  try{
+    const r = await api(`/posts/${postId}/like`, { method:"POST" });
+    const p = curPosts.find(x => x.id === postId);
+    if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; }
+    renderPosts(curPosts);                          // re-render so the count/state update in place
+  } catch(e){ flash(e.message, "err"); }
+}
+// Toggle the topic's accepted answer. Re-marking the current solution clears it.
+async function markSolution(postId){
+  try{
+    const r = await api(`/topics/${curTopicId}/solution`, { method:"PATCH", body:{ post_id: postId }});
+    if (curTopic) curTopic.solution_post_id = r.solution_post_id;
+    flash(r.solution_post_id ? "התגובה סומנה כפתרון." : "סימון הפתרון בוטל.", "ok");
+    renderPosts(curPosts);
+  } catch(e){ flash(e.message, "err"); }
 }
 
 // ====== writes ======
