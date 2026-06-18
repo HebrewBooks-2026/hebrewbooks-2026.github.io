@@ -375,6 +375,7 @@
       <div id="topicMod" class="row-actions"></div>
     </div>
     <div id="posts" class="card"></div>
+    <div id="postsPager" class="pager hidden"></div>
     <div id="replyBox" class="card hidden" style="margin-top:16px">
       <form class="compose" id="replyForm">
         <label class="fld">תגובה</label>
@@ -555,6 +556,7 @@ let topicPage = 1;        // current page of the topic list (reset to 1 on filte
 let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
 let curTopic = null;      // the open topic object (for solution_post_id / author checks)
+let curPostPage = 1;      // current page of posts within the open topic
 let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
 let allUsers = [];        // admin user-management cache (filtered client-side)
 let searchQuery = "";     // topic search term (matched server-side on title + posts)
@@ -1225,11 +1227,20 @@ function gotoTopicPage(n){
 // Render-only: loads + shows a topic WITHOUT touching history (used by refreshes and
 // by routeFromHash). Use goTopic() for user-initiated navigation that should push a
 // Back-button entry.
-async function openTopic(id){
+// opts.page: load a specific posts page (from the posts pager). Otherwise we read a
+// "&post=<id>" anchor from the URL hash and ask the server which page holds it, so a
+// permalink lands on — and scrolls to — the right page.
+async function openTopic(id, opts){
+  opts = opts || {};
   curTopicId = id;
-  const data = await api("/topics/" + id);
+  let url = "/topics/" + id;
+  const anchor = opts.page ? null : (location.hash.match(/[#&]post=(\d+)/) || [])[1];
+  if (opts.page) url += "?page=" + opts.page;
+  else if (anchor) url += "?post=" + anchor;
+  const data = await api(url);
   const t = data.topic;
   curTopic = t;
+  curPostPage = data.post_page || 1;
   $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
 
   // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
@@ -1255,6 +1266,7 @@ async function openTopic(id){
   }
 
   renderPosts(data.posts);
+  renderPostsPager(data.posts_total || 0, data.posts_page_size || 20, curPostPage);
 
   // reply box / locked note
   const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
@@ -1263,7 +1275,33 @@ async function openTopic(id){
   if (canReply){ setMode($("replyBody"), "text"); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
 
   show("viewTopic");
-  scrollToHashPost();   // honor a "#topic=…&post=…" deep link once the posts are rendered
+  if (opts.page) $("topicTitle").scrollIntoView({ behavior:"smooth", block:"start" });  // page change → top
+  else scrollToHashPost();   // honor a "#topic=…&post=…" deep link once the posts are rendered
+}
+// Posts pager — same look/behaviour as the topic-list pager, scoped to the open topic.
+function renderPostsPager(total, pageSize, page){
+  const box = $("postsPager");
+  const count = Math.max(1, Math.ceil(total / pageSize));
+  if (count <= 1){ box.classList.add("hidden"); box.innerHTML = ""; return; }
+  curPostPage = Math.min(page, count);
+  let html = `<button class="pg-btn" data-pg="${curPostPage - 1}" ${curPostPage <= 1 ? "disabled" : ""}>הקודם</button>`;
+  for (const n of pageWindow(curPostPage, count)){
+    html += n === "…" ? `<span class="pg-gap">…</span>`
+      : `<button class="pg-btn ${n === curPostPage ? "on" : ""}" data-pg="${n}">${n}</button>`;
+  }
+  html += `<button class="pg-btn" data-pg="${curPostPage + 1}" ${curPostPage >= count ? "disabled" : ""}>הבא</button>`;
+  box.innerHTML = html;
+  box.classList.remove("hidden");
+  box.querySelectorAll(".pg-btn").forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    const n = parseInt(b.getAttribute("data-pg"), 10);
+    if (n !== curPostPage) gotoPostPage(n);
+  });
+}
+function gotoPostPage(n){
+  // manual page move: drop any "&post=" anchor so a refresh stays on this page
+  if (/[#&]post=/.test(location.hash)) history.replaceState(null, "", "#topic=" + curTopicId);
+  openTopic(curTopicId, { page: n });
 }
 
 function renderPosts(posts){
@@ -1425,8 +1463,11 @@ async function submitNewTopic(){
 }
 async function submitReply(id){
   try{
-    await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")) }});
+    const r = await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")) }});
     $("replyBody").value = ""; setMode($("replyBody"), "text");
+    // jump to the new reply (server resolves its page → the last one) and scroll to it;
+    // replaceState keeps the Back button clean.
+    if (r.post_id) history.replaceState(null, "", "#topic=" + id + "&post=" + r.post_id);
     openTopic(id);
   } catch(e){ flash(e.message, "err"); }
 }
@@ -1735,8 +1776,10 @@ function routeFromHash(){
   const m = location.hash.match(/^#topic=(\d+)/);
   if (m){
     const id = parseInt(m[1], 10);
+    const pid = (location.hash.match(/[#&]post=(\d+)/) || [])[1];
     if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
-    else scrollToHashPost();   // already on this topic — just jump to the post anchor
+    else if (pid && !document.getElementById("post-" + pid)) openTopic(id);  // anchor on another page → reload
+    else scrollToHashPost();   // already on this topic, post is on-screen — just jump to it
   } else if (!$("viewTopic").classList.contains("hidden")){
     showList();
   }
