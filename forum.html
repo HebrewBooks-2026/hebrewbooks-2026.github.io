@@ -110,6 +110,11 @@
     padding:3px 4px;border-radius:7px;opacity:.55}
   .cat-act:hover{opacity:1;background:var(--parch2)}
   .cat-act.on{opacity:1}
+  /* sub-category: indented under its parent, with a small RTL elbow connector */
+  .cat.subcat{margin-inline-start:16px;padding-inline-start:10px;border-inline-start:2px solid var(--line);
+    border-radius:0 11px 11px 0;font-weight:500}
+  .cat.subcat .cat-name{font-size:.94rem}
+  .subcat-elbow{color:var(--muted);opacity:.7;font-size:.8rem;margin-inline-end:2px}
 
   .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
   .panel-head h1{font-size:1.7rem;font-weight:900}
@@ -1029,27 +1034,42 @@ async function loadChangelog(){
 
 // ====== categories + topics ======
 // pre: a categories array already fetched (e.g. by /bootstrap) — skips the round-trip.
+// One sidebar row. `child` => a sub-category: indented, no pin/add-sub controls.
+function catRowHtml(c, child){
+  const admin = atLeast("admin");
+  const dateTxt = c.last_post_at ? whenDate(c.last_post_at) : "אין הודעות";
+  const elbow = child ? `<span class="subcat-elbow">↳</span>` : "";
+  let adminBtns = "";
+  if (admin){
+    adminBtns = `<span class="cat-admin">`;
+    if (!child){
+      adminBtns +=
+        `<button class="cat-act ${c.is_pinned?'on':''}" data-act="pin" title="${c.is_pinned?'בטל נעיצה':'נעץ קטגוריה למעלה'}">📌</button>` +
+        `<button class="cat-act" data-act="addsub" title="הוסף תת-קטגוריה">➕</button>`;
+    }
+    adminBtns +=
+      `<button class="cat-act" data-act="rename" title="שנה שם">✎</button>` +
+      `<button class="cat-act" data-act="del" title="מחק קטגוריה">🗑</button></span>`;
+  }
+  return `<div class="cat ${child?'subcat ':''}${activeCat===c.id?'active':''}" data-cat="${c.id}">` +
+    `<div class="cat-main">` +
+      `<span class="cat-name">${elbow}${c.is_pinned&&!child?'📌 ':''}${esc(c.name)}</span>` +
+      `<span class="cat-date">${dateTxt}</span>` +
+    `</div>${adminBtns}</div>`;
+}
 async function loadCategories(pre){
   cats = pre || (await api("/categories")).categories;
-  // sidebar. Categories arrive pre-sorted (pinned first, then newest activity).
-  // Each row shows its last-message date; admins get inline pin/rename/delete.
+  // sidebar. Categories arrive pre-sorted (pinned first, then newest activity). We
+  // group them into a one-level tree: each top-level row, then its children indented
+  // beneath it. Each row shows its last-message date; admins get inline controls.
   const box = $("cats");
-  const admin = atLeast("admin");
+  const tops = cats.filter(c => !c.parent_id);
+  const kidsOf = (pid) => cats.filter(c => c.parent_id === pid);   // preserves backend order
   const allRow = `<div class="cat ${activeCat===null?'active':''}" data-cat="">` +
     `<div class="cat-main"><span class="cat-name">הכל</span></div></div>`;
-  box.innerHTML = allRow + cats.map(c => {
-    const dateTxt = c.last_post_at ? whenDate(c.last_post_at) : "אין הודעות";
-    const adminBtns = admin ? `<span class="cat-admin">` +
-        `<button class="cat-act ${c.is_pinned?'on':''}" data-act="pin" title="${c.is_pinned?'בטל נעיצה':'נעץ קטגוריה למעלה'}">📌</button>` +
-        `<button class="cat-act" data-act="rename" title="שנה שם">✎</button>` +
-        `<button class="cat-act" data-act="del" title="מחק קטגוריה">🗑</button>` +
-      `</span>` : "";
-    return `<div class="cat ${activeCat===c.id?'active':''}" data-cat="${c.id}">` +
-      `<div class="cat-main">` +
-        `<span class="cat-name">${c.is_pinned?'📌 ':''}${esc(c.name)}</span>` +
-        `<span class="cat-date">${dateTxt}</span>` +
-      `</div>${adminBtns}</div>`;
-  }).join("");
+  box.innerHTML = allRow + tops.map(p =>
+    catRowHtml(p, false) + kidsOf(p.id).map(k => catRowHtml(k, true)).join("")
+  ).join("");
   box.querySelectorAll(".cat").forEach(el => el.onclick = () => {
     const v = el.getAttribute("data-cat");
     activeCat = v ? parseInt(v,10) : null;
@@ -1061,11 +1081,15 @@ async function loadCategories(pre){
     const c = cats.find(x => x.id === id);
     const act = btn.getAttribute("data-act");
     if (act === "pin") catPin(id, !c.is_pinned);
+    else if (act === "addsub") addCategory(id);
     else if (act === "rename") catRename(id, c.name);
     else if (act === "del") catDelete(id, c.name);
   });
-  // new-topic category dropdown
-  $("newCat").innerHTML = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  // new-topic category dropdown — same tree order, children prefixed with "↳".
+  $("newCat").innerHTML = tops.map(p =>
+    `<option value="${p.id}">${esc(p.name)}</option>` +
+    kidsOf(p.id).map(k => `<option value="${k.id}">&nbsp;&nbsp;↳ ${esc(k.name)}</option>`).join("")
+  ).join("");
 }
 
 // The list heading reflects the search term, the chosen category, or "כל הנושאים".
@@ -1407,12 +1431,18 @@ async function staffRole(uid, name, current){
   try{ await api(`/users/${uid}/role`, { method:"PATCH", body:{ role:r.role }}); flash(`התפקיד של ${name} עודכן.`,"ok"); openTopic(curTopicId); }
   catch(e){ flash(e.message, "err"); }
 }
-async function addCategory(){
-  const r = await openModal({ title:"קטגוריה חדשה",
-    bodyHTML:`<input class="in" data-field="name" maxlength="120" placeholder="שם הקטגוריה">`,
+// parentId set => create a sub-category under it; omitted => a top-level category.
+async function addCategory(parentId){
+  const sub = parentId != null;
+  const parent = sub ? cats.find(c => c.id === parentId) : null;
+  const r = await openModal({ title: sub ? "תת-קטגוריה חדשה" : "קטגוריה חדשה",
+    bodyHTML: (sub ? `<p class="modal-sub">בתוך "${esc(parent ? parent.name : "")}"</p>` : "") +
+      `<input class="in" data-field="name" maxlength="120" placeholder="שם הקטגוריה">`,
     okText:"הוסף" });
   if (!r || !r.name.trim()) return;
-  try{ await api("/categories", { method:"POST", body:{ name:r.name.trim() }}); flash("הקטגוריה נוספה.","ok"); loadCategories(); }
+  const body = { name:r.name.trim() };
+  if (sub) body.parent_id = parentId;
+  try{ await api("/categories", { method:"POST", body }); flash(sub?"תת-הקטגוריה נוספה.":"הקטגוריה נוספה.","ok"); loadCategories(); }
   catch(e){ flash(e.message, "err"); }
 }
 async function catPin(id, pinned){
@@ -1430,6 +1460,15 @@ async function catRename(id, current){
   catch(e){ flash(e.message, "err"); }
 }
 async function catDelete(id, name){
+  // A parent with sub-categories can't be purged in one click — tell the admin to
+  // clear the children first (the Worker enforces this too, with a 409).
+  if (cats.some(c => c.parent_id === id)){
+    await openModal({ title:"לא ניתן למחוק",
+      bodyHTML:`<p class="modal-msg">לקטגוריה "<b>${esc(name)}</b>" יש תת-קטגוריות.<br>` +
+               `מחק או רוקן אותן קודם, ואז ניתן יהיה למחוק את הקטגוריה.</p>`,
+      okText:"הבנתי" });
+    return;
+  }
   const r = await openModal({ title:"מחיקת קטגוריה",
     bodyHTML:`<p class="modal-msg">למחוק את הקטגוריה "<b>${esc(name)}</b>"?<br>` +
              `כל הנושאים וההודעות שבתוכה יימחקו לצמיתות — אין שחזור.</p>`,
@@ -1515,7 +1554,7 @@ function routeFromHash(){
 $("backFromTopic").onclick = goList;
 $("backFromNew").onclick = () => show("viewList");
 $("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
-$("addCatBtn").onclick = addCategory;
+$("addCatBtn").onclick = () => addCategory();
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
 // topic sort selector (persisted)
