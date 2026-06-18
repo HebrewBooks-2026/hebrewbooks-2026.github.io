@@ -1015,8 +1015,9 @@ async function loadChangelog(){
 }
 
 // ====== categories + topics ======
-async function loadCategories(){
-  cats = (await api("/categories")).categories;
+// pre: a categories array already fetched (e.g. by /bootstrap) — skips the round-trip.
+async function loadCategories(pre){
+  cats = pre || (await api("/categories")).categories;
   // sidebar. Categories arrive pre-sorted (pinned first, then newest activity).
   // Each row shows its last-message date; admins get inline pin/rename/delete.
   const box = $("cats");
@@ -1060,13 +1061,18 @@ function updateListTitle(){
   const cat = activeCat ? cats.find(c => c.id === activeCat) : null;
   $("listTitle").textContent = cat ? cat.name : "כל הנושאים";
 }
-async function loadTopics(){
+// pre: a {topics:[...]} payload already fetched (e.g. by /bootstrap) — skips the
+// round-trip. Only the default view (no category / sort=new / no search) is pre-fed.
+async function loadTopics(pre){
   updateListTitle();
-  const p = new URLSearchParams();
-  if (activeCat) p.set("category", activeCat);
-  p.set("sort", sortMode);
-  if (searchQuery) p.set("q", searchQuery);
-  const data = await api("/topics?" + p.toString());
+  let data = pre;
+  if (!data){
+    const p = new URLSearchParams();
+    if (activeCat) p.set("category", activeCat);
+    p.set("sort", sortMode);
+    if (searchQuery) p.set("q", searchQuery);
+    data = await api("/topics?" + p.toString());
+  }
   const box = $("topics");
   if (!data.topics.length){
     box.innerHTML = `<div class="empty">${searchQuery
@@ -1537,11 +1543,21 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
 
 (async function init(){
   consumeHash();
-  await refreshMe();
-  // Google first-timers (no join form yet) are prompted immediately.
-  if (me && me.status === "incomplete") openJoin();
-  loadChangelog();
-  try{ await loadCategories(); await loadTopics(); routeFromHash(); }
+  loadChangelog();   // fire-and-forget: a slow cross-origin GitHub fetch that must
+                     // NEVER block the forum from painting (fills "מה חדש" late).
+  try{
+    // ONE round-trip for the first paint: current user + categories + default topics.
+    // Replaces the old 3 serial calls (/auth/me → /categories → /topics).
+    const boot = await api("/bootstrap");
+    if (token && !boot.user){ token = null; localStorage.removeItem("forum_token"); } // stale token
+    me = boot.user || null;
+    renderAuth();
+    // Google first-timers (no join form yet) are prompted immediately.
+    if (me && me.status === "incomplete") openJoin();
+    await loadCategories(boot.categories);
+    await loadTopics({ topics: boot.topics });
+    routeFromHash();
+  }
   catch(e){ flash("טעינת הפורום נכשלה: " + e.message, "err"); }
 })();
 </script>
