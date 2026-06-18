@@ -127,6 +127,15 @@
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  /* numbered pager under the topic list */
+  .pager{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin-top:14px}
+  .pager.hidden{display:none}
+  .pg-btn{min-width:36px;padding:7px 11px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    border-radius:9px;cursor:pointer;font-weight:700;font-size:.9rem;font-family:inherit}
+  .pg-btn:hover:not(:disabled):not(.on){background:var(--parch);border-color:var(--gold)}
+  .pg-btn.on{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;border-color:var(--gold);cursor:default}
+  .pg-btn:disabled{opacity:.45;cursor:default}
+  .pg-gap{color:var(--muted);padding:0 2px}
   .lock{color:var(--gold);font-weight:700}
   .empty{padding:40px;text-align:center;color:var(--muted)}
 
@@ -350,6 +359,7 @@
         <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש נושאים…" autocomplete="off">
       </div>
       <div id="topics" class="card"></div>
+      <div id="pager" class="pager hidden"></div>
     </div>
     <aside class="news">
       <h3>מה חדש בגרסאות</h3>
@@ -541,6 +551,7 @@ let token = localStorage.getItem("forum_token") || null;
 let me = null;            // current user object or null
 let cats = [];            // categories
 let activeCat = null;     // selected category id (null = all)
+let topicPage = 1;        // current page of the topic list (reset to 1 on filter changes)
 let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
 let curTopic = null;      // the open topic object (for solution_post_id / author checks)
@@ -1115,6 +1126,7 @@ async function loadCategories(pre){
   box.querySelectorAll(".cat").forEach(el => el.onclick = () => {
     const v = el.getAttribute("data-cat");
     activeCat = v ? parseInt(v,10) : null;
+    topicPage = 1;                              // new filter → back to page 1
     loadCategories(); loadTopics();
   });
   box.querySelectorAll(".cat-act").forEach(btn => btn.onclick = (e) => {
@@ -1150,6 +1162,7 @@ async function loadTopics(pre){
     if (activeCat) p.set("category", activeCat);
     p.set("sort", sortMode);
     if (searchQuery) p.set("q", searchQuery);
+    p.set("page", topicPage);
     data = await api("/topics?" + p.toString());
   }
   const box = $("topics");
@@ -1157,8 +1170,10 @@ async function loadTopics(pre){
     box.innerHTML = `<div class="empty">${searchQuery
       ? "לא נמצאו נושאים התואמים לחיפוש."
       : ("אין עדיין נושאים כאן." + (me ? " פתח את הראשון!" : ""))}</div>`;
+    renderPager(0, data.page_size || 30, 1);
     return;
   }
+  renderPager(data.total || 0, data.page_size || 30, data.page || topicPage);
   box.innerHTML = data.topics.map(t => `
     <div class="topic-row" data-id="${t.id}">
       <div>
@@ -1169,6 +1184,41 @@ async function loadTopics(pre){
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
+}
+
+// Which page numbers to show: always 1 + last + current±1, with "…" filling gaps.
+function pageWindow(page, count){
+  const want = [...new Set([1, count, page - 1, page, page + 1])]
+    .filter(n => n >= 1 && n <= count).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const n of want){ if (n - prev > 1) out.push("…"); out.push(n); prev = n; }
+  return out;
+}
+// Numbered pager for the topic list. Hidden when there's a single page.
+function renderPager(total, pageSize, page){
+  const box = $("pager");
+  const count = Math.max(1, Math.ceil(total / pageSize));
+  if (count <= 1){ box.classList.add("hidden"); box.innerHTML = ""; return; }
+  topicPage = Math.min(page, count);
+  let html = `<button class="pg-btn" data-pg="${topicPage - 1}" ${topicPage <= 1 ? "disabled" : ""}>הקודם</button>`;
+  for (const n of pageWindow(topicPage, count)){
+    html += n === "…" ? `<span class="pg-gap">…</span>`
+      : `<button class="pg-btn ${n === topicPage ? "on" : ""}" data-pg="${n}">${n}</button>`;
+  }
+  html += `<button class="pg-btn" data-pg="${topicPage + 1}" ${topicPage >= count ? "disabled" : ""}>הבא</button>`;
+  box.innerHTML = html;
+  box.classList.remove("hidden");
+  box.querySelectorAll(".pg-btn").forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    const n = parseInt(b.getAttribute("data-pg"), 10);
+    if (n !== topicPage) gotoTopicPage(n);
+  });
+}
+function gotoTopicPage(n){
+  topicPage = n;
+  loadTopics();
+  $("listTitle").scrollIntoView({ behavior:"smooth", block:"start" });  // start new page at the top
 }
 
 // ====== single topic ======
@@ -1618,6 +1668,7 @@ async function catDelete(id, name){
   try{ await api(`/categories/${id}`, { method:"DELETE" });
     flash("הקטגוריה וכל תוכנה נמחקו.","ok");
     if (activeCat === id) activeCat = null;
+    topicPage = 1;
     loadCategories(); loadTopics(); }
   catch(e){ flash(e.message, "err"); }
 }
@@ -1700,7 +1751,7 @@ $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
 // topic sort selector (persisted)
 $("sortSel").value = sortMode;
-$("sortSel").onchange = () => { sortMode = $("sortSel").value; localStorage.setItem("forum_sort", sortMode); loadTopics(); };
+$("sortSel").onchange = () => { sortMode = $("sortSel").value; localStorage.setItem("forum_sort", sortMode); topicPage = 1; loadTopics(); };
 
 // topic search (server-side; debounced so we don't hit the API on every keystroke)
 $("topicSearch").oninput = () => {
@@ -1709,6 +1760,7 @@ $("topicSearch").oninput = () => {
     const v = $("topicSearch").value.trim();
     if (v === searchQuery) return;
     searchQuery = v;
+    topicPage = 1;                              // new search → back to page 1
     loadTopics();
   }, 300);
 };
@@ -1785,7 +1837,7 @@ setInterval(refreshBell, 60000);
     // Google first-timers (no join form yet) are prompted immediately.
     if (me && me.status === "incomplete") openJoin();
     await loadCategories(boot.categories);
-    await loadTopics({ topics: boot.topics });
+    await loadTopics({ topics: boot.topics, total: boot.total, page_size: boot.page_size, page: 1 });
     routeFromHash();
   }
   catch(e){ flash("טעינת הפורום נכשלה: " + e.message, "err"); }
