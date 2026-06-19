@@ -1431,8 +1431,8 @@ async function toggleLike(postId){
   try{
     const r = await api(`/posts/${postId}/like`, { method:"POST" });
     const p = curPosts.find(x => x.id === postId);
-    if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; }
-    renderPosts(curPosts);                          // re-render so the count/state update in place
+    if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; p.liker_names = r.liker_names; }
+    renderPosts(curPosts);                          // re-render so the count + popover list stay in sync
   } catch(e){ flash(e.message, "err"); }
 }
 // Toggle the topic's accepted answer. Re-marking the current solution clears it.
