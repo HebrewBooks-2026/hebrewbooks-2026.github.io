@@ -158,11 +158,19 @@
   /* like button: filled gold once the current user has liked it */
   .like-btn{display:inline-flex;align-items:center;gap:5px}
   .like-btn.liked{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;border-color:var(--gold)}
-  /* the like count doubles as a "who liked" trigger */
-  .like-who{font-weight:800;display:inline-flex;align-items:center;gap:4px}
-  .likers-list{margin:0;padding:0;list-style:none;max-height:50vh;overflow:auto}
-  .likers-list li{padding:8px 6px;border-bottom:1px solid var(--line);font-weight:600}
-  .likers-list li:last-child{border-bottom:0}
+  /* the like count: hover/focus reveals the "who liked" popover */
+  .like-count{display:inline-flex;align-items:center;font-weight:800;color:var(--muted);
+    padding:2px 9px;border-radius:999px;background:var(--parch2);cursor:default;transition:background .12s,color .12s}
+  .like-count:hover,.like-count:focus{color:var(--ink);background:var(--parch);outline:none}
+  /* styled "who liked" popover */
+  .like-pop{position:fixed;z-index:60;background:#fff;border:1px solid var(--line);border-radius:13px;
+    box-shadow:0 12px 34px rgba(34,41,58,.18);padding:7px;min-width:165px;max-width:250px;max-height:280px;overflow:auto}
+  .like-pop.hidden{display:none}
+  .like-pop-h{font-size:.7rem;font-weight:800;color:var(--muted);letter-spacing:.04em;padding:4px 7px 8px}
+  .like-pop-row{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;font-weight:600;font-size:.93rem}
+  .like-pop-row:hover{background:var(--parch)}
+  .avatar{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:50%;flex:0 0 auto;
+    background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;font-weight:800;font-size:.86rem}
   /* accepted-answer: green badge + post highlight; the "mark" button goes green when on */
   .sol-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
   .follow-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
@@ -509,6 +517,9 @@
     <div class="modal-actions"><button id="notifClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
+
+<!-- "who liked" hover popover (positioned in JS; position:fixed) -->
+<div id="likePop" class="like-pop hidden"></div>
 
 <!-- edit a post (textarea + image button, mirrors the compose forms) -->
 <div id="editOverlay" class="modal-overlay hidden">
@@ -1326,6 +1337,7 @@ function gotoPostPage(n){
 
 function renderPosts(posts){
   curPosts = posts;
+  hideLikePop();   // drop any open like-popover before its anchor is replaced
   $("posts").innerHTML = posts.map(p => {
     const roleTag = p.author_role && p.author_role !== "member"
       ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
@@ -1338,10 +1350,10 @@ function renderPosts(posts){
     const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
     let actions = "";
     // like — 👍 toggles (click handler deals with sign-in/approval); the count next to
-    // it is a separate button that opens the "who liked" list (shown only when >0).
-    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}" title="${p.liked_by_me?'בטל לייק':'סמן לייק'}">👍</button>`;
+    // it (shown only when >0) reveals WHO liked in a styled popover on hover/focus.
+    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍</button>`;
     if (p.like_count > 0)
-      actions += `<button class="btn btn-light btn-sm like-who" data-act="likers" data-id="${p.id}" title="מי סימן לייק">${p.like_count} 👥</button>`;
+      actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
     if (mine || atLeast("moderator")){
       actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
       actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
@@ -1378,12 +1390,39 @@ function renderPosts(posts){
     if (act === "edit")  return openEdit(id);
     if (act === "link")  return sharePost(id);
     if (act === "like")  return toggleLike(id);
-    if (act === "likers") return showLikers(id);
     if (act === "solution") return markSolution(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
+  // hover/focus the like count → styled "who liked" popover (names embedded in the post)
+  $("posts").querySelectorAll(".like-count").forEach(el => {
+    el.onmouseenter = () => showLikePop(el);
+    el.onmouseleave = hideLikePop;
+    el.onfocus = () => showLikePop(el);
+    el.onblur = hideLikePop;
+  });
 }
+// Styled popover listing who liked a post — instant (names come embedded as
+// p.liker_names, '||'-joined). position:fixed, clamped to the viewport, flips above
+// when there's no room below.
+function showLikePop(el){
+  const id = parseInt(el.getAttribute("data-id"), 10);
+  const p = curPosts.find(x => x.id === id);
+  if (!p || !p.liker_names) return;
+  const names = p.liker_names.split("||").filter(Boolean);
+  const pop = $("likePop");
+  pop.innerHTML = `<div class="like-pop-h">${names.length === 1 ? "אהב/ה" : "אהבו"} את התגובה</div>` +
+    names.map(nm => `<div class="like-pop-row"><span class="avatar">${esc(nm.trim().slice(0,1))}</span>${esc(nm)}</div>`).join("");
+  pop.classList.remove("hidden");
+  const r = el.getBoundingClientRect();
+  let left = r.right - pop.offsetWidth;
+  left = Math.max(8, Math.min(left, window.innerWidth - 8 - pop.offsetWidth));
+  let top = r.bottom + 6;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = r.top - 6 - pop.offsetHeight;
+  pop.style.left = left + "px";
+  pop.style.top = Math.max(8, top) + "px";
+}
+function hideLikePop(){ $("likePop").classList.add("hidden"); }
 
 // ---- interaction: likes + accepted-answer ----------------------------------
 async function toggleLike(postId){
@@ -1394,21 +1433,6 @@ async function toggleLike(postId){
     const p = curPosts.find(x => x.id === postId);
     if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; }
     renderPosts(curPosts);                          // re-render so the count/state update in place
-  } catch(e){ flash(e.message, "err"); }
-}
-// Show who liked a post (public). Names + a role tag for staff.
-async function showLikers(postId){
-  try{
-    const r = await api(`/posts/${postId}/likes`);
-    const list = r.likers || [];
-    const body = list.length
-      ? `<ul class="likers-list">${list.map(u => {
-          const tag = u.role && u.role !== "member"
-            ? ` <span class="role-tag role-${u.role}">${u.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
-          return `<li>👍 ${esc(u.name)}${tag}</li>`;
-        }).join("")}</ul>`
-      : `<p class="modal-msg">אין עדיין לייקים.</p>`;
-    await openModal({ title:"מי סימן לייק", bodyHTML: body, okText:"סגור" });
   } catch(e){ flash(e.message, "err"); }
 }
 // Toggle the topic's accepted answer. Re-marking the current solution clears it.
