@@ -1866,9 +1866,6 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
 $("bellBtn").onclick = openNotifications;
 $("notifClose").onclick = closeNotifications;
 $("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
-// keep the unread badge fresh while the tab is open (only polls when signed in)
-setInterval(refreshBell, 60000);
-
 // ---- auto-refresh: keep the list / open topic live without a manual reload --------
 async function refreshOpenTopicPosts(){
   const data = await api("/topics/" + curTopicId + "?page=" + curPostPage);
@@ -1876,9 +1873,14 @@ async function refreshOpenTopicPosts(){
   renderPosts(data.posts);
   renderPostsPager(data.posts_total || 0, data.posts_page_size || 30, data.post_page || curPostPage);
 }
-// Periodic, NON-intrusive refresh. Bails out whenever it would disturb the user: an
-// open dialog, the search box focused, or a reply draft in progress.
+// One periodic tick (every 30s). The header badges — notifications + the admin
+// pending-requests count — are non-intrusive, so they ALWAYS update, even with a
+// dialog open. The content refresh (list / open topic) IS intrusive, so it bails out
+// whenever it would disturb the user: an open dialog, the search box focused, or a
+// reply draft in progress. (refreshBell/refreshReqBadge self-guard on sign-in/role.)
 async function autoRefresh(){
+  refreshBell();
+  refreshReqBadge();
   if (document.querySelector(".modal-overlay:not(.hidden)")) return;
   try{
     if (!$("viewList").classList.contains("hidden")){
