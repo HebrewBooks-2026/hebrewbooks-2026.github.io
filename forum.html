@@ -158,7 +158,11 @@
   /* like button: filled gold once the current user has liked it */
   .like-btn{display:inline-flex;align-items:center;gap:5px}
   .like-btn.liked{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;border-color:var(--gold)}
-  .like-n{font-weight:800;min-width:.7em;text-align:center}
+  /* the like count doubles as a "who liked" trigger */
+  .like-who{font-weight:800;display:inline-flex;align-items:center;gap:4px}
+  .likers-list{margin:0;padding:0;list-style:none;max-height:50vh;overflow:auto}
+  .likers-list li{padding:8px 6px;border-bottom:1px solid var(--line);font-weight:600}
+  .likers-list li:last-child{border-bottom:0}
   /* accepted-answer: green badge + post highlight; the "mark" button goes green when on */
   .sol-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
   .follow-btn.on{background:#e7f3ea;border-color:var(--ok);color:var(--ok)}
@@ -274,6 +278,11 @@
     margin-inline-start:5px;border-radius:999px;background:var(--danger);color:#fff;
     font-size:.72rem;font-weight:800;line-height:1}
   .req-badge.hidden{display:none}
+  /* neutral count chip (e.g. total users on the "משתמשים" button) — informational, not an alert */
+  .count-chip{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;
+    margin-inline-start:5px;border-radius:999px;background:var(--parch2);color:var(--muted);
+    font-size:.72rem;font-weight:800;line-height:1}
+  .count-chip.hidden{display:none}
   /* header notification bell */
   .bell{position:relative;background:transparent;border:0;cursor:pointer;font-size:1.2rem;line-height:1;
     padding:4px;border-radius:9px;opacity:.92}
@@ -758,7 +767,7 @@ function renderAuth(){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
     const adminBtns = atLeast("admin")
-      ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים</button>` +
+      ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים<span id="usrCount" class="count-chip hidden">0</span></button>` +
         ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות<span id="reqBadge" class="req-badge hidden">0</span></button>`
       : "";
     slot.innerHTML =
@@ -922,9 +931,16 @@ async function refreshReqBadge(){
   const badge = $("reqBadge");
   if (!badge || !atLeast("admin")) return;
   try{
-    const n = (await api("/admin/requests")).requests.length;
+    const r = await api("/admin/requests");
+    const n = r.requests.length;
     badge.textContent = n;
     badge.classList.toggle("hidden", n === 0);
+    // total-users count chip on the "משתמשים" button rides the same response
+    const uc = $("usrCount");
+    if (uc && typeof r.user_count === "number"){
+      uc.textContent = r.user_count;
+      uc.classList.remove("hidden");
+    }
   } catch { badge.classList.add("hidden"); }
 }
 
@@ -1321,8 +1337,11 @@ function renderPosts(posts){
     // the asker (topic author) or a moderator+ may mark/unmark the accepted answer
     const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
     let actions = "";
-    // like — count is shown to everyone; the click handler deals with sign-in/approval
-    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍 <span class="like-n">${p.like_count||0}</span></button>`;
+    // like — 👍 toggles (click handler deals with sign-in/approval); the count next to
+    // it is a separate button that opens the "who liked" list (shown only when >0).
+    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}" title="${p.liked_by_me?'בטל לייק':'סמן לייק'}">👍</button>`;
+    if (p.like_count > 0)
+      actions += `<button class="btn btn-light btn-sm like-who" data-act="likers" data-id="${p.id}" title="מי סימן לייק">${p.like_count} 👥</button>`;
     if (mine || atLeast("moderator")){
       actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
       actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
@@ -1359,6 +1378,7 @@ function renderPosts(posts){
     if (act === "edit")  return openEdit(id);
     if (act === "link")  return sharePost(id);
     if (act === "like")  return toggleLike(id);
+    if (act === "likers") return showLikers(id);
     if (act === "solution") return markSolution(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
@@ -1374,6 +1394,21 @@ async function toggleLike(postId){
     const p = curPosts.find(x => x.id === postId);
     if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; }
     renderPosts(curPosts);                          // re-render so the count/state update in place
+  } catch(e){ flash(e.message, "err"); }
+}
+// Show who liked a post (public). Names + a role tag for staff.
+async function showLikers(postId){
+  try{
+    const r = await api(`/posts/${postId}/likes`);
+    const list = r.likers || [];
+    const body = list.length
+      ? `<ul class="likers-list">${list.map(u => {
+          const tag = u.role && u.role !== "member"
+            ? ` <span class="role-tag role-${u.role}">${u.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
+          return `<li>👍 ${esc(u.name)}${tag}</li>`;
+        }).join("")}</ul>`
+      : `<p class="modal-msg">אין עדיין לייקים.</p>`;
+    await openModal({ title:"מי סימן לייק", bodyHTML: body, okText:"סגור" });
   } catch(e){ flash(e.message, "err"); }
 }
 // Toggle the topic's accepted answer. Re-marking the current solution clears it.
