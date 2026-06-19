@@ -1092,7 +1092,11 @@ async function loadChangelog(){
 // One sidebar row. `child` => a sub-category: indented, no pin/add-sub controls.
 function catRowHtml(c, child){
   const admin = atLeast("admin");
-  const dateTxt = c.last_post_at ? whenDate(c.last_post_at) : "אין הודעות";
+  // meta line: message count + last-post date ("אין הודעות" when the category is empty)
+  const n = c.post_count || 0;
+  const metaTxt = n
+    ? `${n} ${n === 1 ? "הודעה" : "הודעות"} · פרסום אחרון: ${whenDate(c.last_post_at)}`
+    : "אין הודעות";
   const elbow = child ? `<span class="subcat-elbow">↳</span>` : "";
   let adminBtns = "";
   if (admin){
@@ -1109,7 +1113,7 @@ function catRowHtml(c, child){
   return `<div class="cat ${child?'subcat ':''}${activeCat===c.id?'active':''}" data-cat="${c.id}">` +
     `<div class="cat-main">` +
       `<span class="cat-name">${elbow}${c.is_pinned&&!child?'📌 ':''}${esc(c.name)}</span>` +
-      `<span class="cat-date">${dateTxt}</span>` +
+      `<span class="cat-date">${metaTxt}</span>` +
     `</div>${adminBtns}</div>`;
 }
 async function loadCategories(pre){
@@ -1864,6 +1868,32 @@ $("notifClose").onclick = closeNotifications;
 $("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
 // keep the unread badge fresh while the tab is open (only polls when signed in)
 setInterval(refreshBell, 60000);
+
+// ---- auto-refresh: keep the list / open topic live without a manual reload --------
+async function refreshOpenTopicPosts(){
+  const data = await api("/topics/" + curTopicId + "?page=" + curPostPage);
+  curTopic = data.topic;
+  renderPosts(data.posts);
+  renderPostsPager(data.posts_total || 0, data.posts_page_size || 30, data.post_page || curPostPage);
+}
+// Periodic, NON-intrusive refresh. Bails out whenever it would disturb the user: an
+// open dialog, the search box focused, or a reply draft in progress.
+async function autoRefresh(){
+  if (document.querySelector(".modal-overlay:not(.hidden)")) return;
+  try{
+    if (!$("viewList").classList.contains("hidden")){
+      if (document.activeElement === $("topicSearch")) return;   // user is typing a search
+      await loadCategories();          // refresh sidebar counts + last-post dates
+      await loadTopics();              // refresh the current page/filter of topics
+    } else if (!$("viewTopic").classList.contains("hidden") && curTopicId){
+      const rb = $("replyBody");
+      if (document.activeElement === rb || (rb && rb.value.trim())) return;   // don't clobber a draft
+      await refreshOpenTopicPosts();
+    }
+  } catch {}   // a transient fetch error must never break the timer
+}
+// every 30s, and only while the tab is actually visible
+setInterval(() => { if (!document.hidden) autoRefresh(); }, 30000);
 
 (async function init(){
   consumeHash();
