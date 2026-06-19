@@ -29,7 +29,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Heebo',-apple-system,'Segoe UI',Arial,sans-serif;color:var(--ink);background:var(--parch);line-height:1.65}
   .serif{font-family:'Frank Ruhl Libre','Heebo',serif}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 22px}
   a{color:inherit;text-decoration:none}
 
   /* ---- top bar ---- */
@@ -76,14 +76,27 @@
   .msg.ok{background:#e9f5ee;color:var(--ok);border:1px solid #bfe0cb}
 
   /* 3 columns (RTL): categories (right) · topics (center) · "מה חדש" (left) */
-  .layout{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start}
-  /* the category pane stays in view while the topics column scrolls (offset below the
-     sticky header). align-self:start keeps it from stretching so sticky can engage. */
-  .side{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px);overflow:auto}
-  /* collapse to a single column on narrow screens */
+  .layout{display:grid;grid-template-columns:230px 1fr 250px;gap:24px;align-items:start}
+  /* side panes stay in view while the topics column scrolls (offset below the sticky
+     header). align-self:start keeps them from stretching so sticky can engage. */
+  .side,.news{position:sticky;top:72px;align-self:start;padding-top:16px;max-height:calc(100vh - 88px)}
+  .side{overflow:auto}
+  /* news: a flex column so the "מה חדש" heading stays pinned and only the list
+     scrolls; a divider line on the side facing the topics separates the two. */
+  .news{display:flex;flex-direction:column;border-inline-start:1px solid var(--line);padding-inline-start:22px}
+  .news h3{flex:0 0 auto}
+  #changelog{flex:1 1 auto;min-height:0;overflow:auto}
+  /* drop the news column when there isn't room for 3 columns, then collapse to 1 */
+  @media(max-width:920px){.layout{grid-template-columns:230px 1fr}.news{display:none}}
   @media(max-width:760px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none;overflow:visible;padding-top:0}}
 
-  .side h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
+  .side h3,.news h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px}
+  /* "מה חדש" version entries */
+  .cl-item{padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:10px}
+  .cl-ver{font-weight:800;color:var(--navy);font-size:.96rem}
+  .cl-date{color:var(--muted);font-size:.74rem;margin:1px 0 6px}
+  .cl-list{margin:0;padding-inline-start:1.1em;font-size:.83rem;color:var(--ink);line-height:1.5}
+  .cl-list li{margin:.18em 0}
   .cat{display:flex;align-items:center;justify-content:space-between;gap:6px;
     padding:9px 12px;border-radius:11px;cursor:pointer;font-weight:600;color:var(--ink);border:1px solid transparent}
   .cat:hover{background:#fff;border-color:var(--line)}
@@ -348,6 +361,10 @@
       <div id="topics" class="card"></div>
       <div id="pager" class="pager hidden"></div>
     </div>
+    <aside class="news">
+      <h3>מה חדש בגרסאות</h3>
+      <div id="changelog"></div>
+    </aside>
   </section>
 
   <!-- ===== single topic view ===== -->
@@ -1016,11 +1033,59 @@ function consumeHash(){
   }
 }
 
-// The "מה חדש" version history now lives as real forum posts in the "מה חדש" category
-// (HebrewBooks-authored, dated to each release — backfilled + auto-posted by publish.ps1),
-// so the old left-column changelog widget was removed. The Worker's GET /changelog
-// endpoint is still served (the in-app update banner uses the release body), just no
-// longer consumed here.
+// ====== "מה חדש" changelog (left column) ======
+// FULLY AUTOMATIC + FULL HISTORY: the forum Worker serves the app's cumulative
+// CHANGELOG.md (attached to every release; the Worker fetches it server-side and
+// caches it — the raw asset is CORS-blocked from the browser, and GitHub Releases
+// themselves get pruned so the API only shows the last few). Each publish.ps1 release
+// updates this on its own — nothing to maintain here.
+function clDate(d){
+  try{ return new Date(d).toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
+  catch{ return d || ""; }
+}
+// Each bullet -> a short summary line: prefer its bold "**…**" lead, trim trailing colon.
+function parseReleaseItems(body){
+  const out = [];
+  for (let line of String(body || "").replace(/^﻿/, "").split(/\r?\n/)){
+    line = line.trim().replace(/^[-*]\s+/, "");
+    if (!line) continue;
+    const bold = line.match(/\*\*(.+?)\*\*/);
+    let item = (bold ? bold[1] : line.replace(/\*\*/g, "")).replace(/[:：]\s*$/, "").trim();
+    if (item) out.push(item);
+  }
+  return out;
+}
+// CHANGELOG.md is "## <version> (<date>)" sections, newest first, then bullet notes.
+function parseChangelogMd(md){
+  const versions = [];
+  for (const part of String(md || "").replace(/^﻿/, "").split(/^##\s+/m).slice(1)){
+    const nl = part.indexOf("\n");
+    const head = (nl < 0 ? part : part.slice(0, nl)).trim();
+    const body = nl < 0 ? "" : part.slice(nl + 1);
+    const mh = head.match(/^([0-9][\w.\-]*)\s*(?:\(([^)]+)\))?/);
+    versions.push({ version: mh ? mh[1] : head, date: (mh && mh[2]) ? mh[2] : "", items: parseReleaseItems(body) });
+  }
+  return versions;
+}
+async function loadChangelog(){
+  const box = $("changelog");
+  if (!box) return;
+  box.innerHTML = `<div class="empty" style="padding:14px">טוען…</div>`;
+  try{
+    const res = await fetch(API + "/changelog");
+    if (!res.ok) throw new Error("changelog " + res.status);
+    const versions = parseChangelogMd(await res.text())
+      .filter(v => !v.version.includes("-"))   // skip beta sections
+      .slice(0, 40);
+    if (!versions.length){ box.innerHTML = ""; return; }
+    box.innerHTML = versions.map(v => `
+      <div class="cl-item">
+        <div class="cl-ver">גרסה ${esc(v.version)}</div>
+        ${v.date ? `<div class="cl-date">${esc(clDate(v.date))}</div>` : ""}
+        ${v.items.length ? `<ul class="cl-list">${v.items.map(it => `<li>${esc(it)}</li>`).join("")}</ul>` : ""}
+      </div>`).join("");
+  } catch { box.innerHTML = ""; } // fail quietly — the column just stays empty
+}
 
 // ====== categories + topics ======
 // pre: a categories array already fetched (e.g. by /bootstrap) — skips the round-trip.
@@ -1802,6 +1867,8 @@ setInterval(refreshBell, 60000);
 
 (async function init(){
   consumeHash();
+  loadChangelog();   // fire-and-forget: a slow cross-origin GitHub fetch that must
+                     // NEVER block the forum from painting (fills "מה חדש" late).
   try{
     // ONE round-trip for the first paint: current user + categories + default topics.
     // Replaces the old 3 serial calls (/auth/me → /categories → /topics).
