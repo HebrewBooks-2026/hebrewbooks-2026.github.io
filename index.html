@@ -203,6 +203,13 @@
   .card-dl{margin-top:14px}
   .card-dl a{color:var(--indigo);font-weight:700;border-bottom:1px dotted var(--indigo)}
   .card-dl a:hover{color:var(--navy)}
+  .card-more{margin-top:12px}
+  .card-more>summary{cursor:pointer;color:var(--indigo);font-weight:700;list-style:none;display:inline-flex;align-items:center;gap:7px}
+  .card-more>summary::-webkit-details-marker{display:none}
+  .card-more>summary::after{content:"▾";font-size:.78em;transition:transform .2s ease}
+  .card-more[open]>summary::after{transform:rotate(180deg)}
+  .card-more>summary:hover{color:var(--navy)}
+  .card-more p{margin-top:12px}
   .card.feat-new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset, var(--shadow)}
   .tag-new{position:absolute;top:18px;left:18px;background:var(--gold);color:#2b2208;font-size:.72rem;font-weight:800;padding:4px 10px;border-radius:999px}
 
@@ -364,8 +371,12 @@
         <span class="tag-new">חדש</span>
         <div class="ic">🖥️</div>
         <h3>פריסת רשת — מאגר אחד למשתמשים רבים</h3>
-        <p>התוכנה מאפשרת לבצע התקנה <b>חד-פעמית של המאגר על שרת מרכזי</b>, וכל העמדות מתחברות אליו. השרת מספק שירות חיפוש מרכזי המאפשר חיפוש <b>מהיר ועקבי</b> בכל עמדה, והספרים נקראים מתיקייה משותפת. בנוסף, אפשר <b>להתקין ולהוסיף עמדה חדשה בלחיצה אחת</b> — ללא כל פעולה נוספת.</p>
-        <p class="card-dl"><a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/download/prerequisites/hbsearch-server.zip">⬇ הורדת חבילת השרת (hbsearch-server.zip)</a></p>
+        <p>התקנה <b>חד-פעמית של המאגר על שרת מרכזי</b>, וכל העמדות מתחברות אליו ומקבלות חיפוש מהיר ועקבי.</p>
+        <details class="card-more">
+          <summary>פרטים והורדת השרת</summary>
+          <p>השרת מספק שירות חיפוש מרכזי המאפשר חיפוש <b>מהיר ועקבי</b> בכל עמדה, והספרים נקראים מתיקייה משותפת. בנוסף, אפשר <b>להתקין ולהוסיף עמדה חדשה בלחיצה אחת</b> — ללא כל פעולה נוספת.</p>
+          <p class="card-dl"><a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/download/prerequisites/hbsearch-server.zip">⬇ הורדת חבילת השרת (hbsearch-server.zip)</a></p>
+        </details>
       </div>
     </div>
   </div>
