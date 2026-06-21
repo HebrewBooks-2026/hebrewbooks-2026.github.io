@@ -1400,7 +1400,9 @@ function postHtml(p, depth, byId){
   const roleTag = p.author_role && p.author_role !== "member"
     ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
   const editedNote = p.edited_at
-    ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name) ? ` · נערך ע"י ${esc(p.editor_name)}` : " · נערך")
+    ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name)
+        ? ` · נערך ע"י ${esc(p.editor_name)} ב־${when(p.edited_at)}`
+        : ` · נערך ב־${when(p.edited_at)}`)
     : "";
   const mine = me && me.id === p.user_id;
   const isSolution = !!(curTopic && curTopic.solution_post_id === p.id);
