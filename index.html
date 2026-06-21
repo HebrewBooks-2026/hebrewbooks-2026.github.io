@@ -256,10 +256,10 @@
   /* Floating order-drive badge — fixed top-left, gently pulses to draw the eye,
      stays visible while scrolling, jumps to the #order-drive callout on click. */
   .order-fab{
-    position:fixed;top:84px;left:18px;z-index:50;width:96px;height:96px;border-radius:50%;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;
+    position:fixed;top:84px;left:18px;z-index:50;width:124px;height:124px;border-radius:50%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;
     background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;
-    font-weight:800;line-height:1.12;font-size:.8rem;
+    font-weight:800;line-height:1.22;font-size:.82rem;padding:8px;
     box-shadow:0 10px 26px rgba(202,162,74,.55);
     transition:transform .15s ease,box-shadow .2s ease;animation:fabPulse 2.2s ease-in-out infinite}
   .order-fab svg{width:26px;height:26px}
@@ -267,7 +267,7 @@
   @keyframes fabPulse{
     0%,100%{box-shadow:0 10px 26px rgba(202,162,74,.5),0 0 0 0 rgba(240,201,105,.55)}
     50%{box-shadow:0 10px 26px rgba(202,162,74,.5),0 0 0 14px rgba(240,201,105,0)}}
-  @media(max-width:680px){.order-fab{width:78px;height:78px;top:14px;left:12px;font-size:.7rem}.order-fab svg{width:22px;height:22px}}
+  @media(max-width:680px){.order-fab{width:104px;height:104px;top:14px;left:12px;font-size:.72rem}.order-fab svg{width:22px;height:22px}}
   @media(prefers-reduced-motion:reduce){.order-fab{animation:none}}
 
   /* ---------- Steps ---------- */
@@ -291,9 +291,9 @@
 </head>
 <body>
 
-<a class="order-fab" href="#order-drive" aria-label="הזמנת כונן עם המאגר המלא">
+<a class="order-fab" href="#order-drive" aria-label="להזמנת כונן עם כל המאגר לחץ כאן">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
-  הזמנת<br>כונן
+  להזמנת כונן<br>עם כל המאגר<br>לחץ כאן
 </a>
 
 <header class="hero">
