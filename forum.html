@@ -142,13 +142,21 @@
   /* posts */
   .post{padding:18px;border-bottom:1px solid var(--line)}
   .post:last-child{border-bottom:0}
-  /* threaded (nested) reply: tinted, with a thread line on the start edge */
-  .post.nested{border-bottom:0;border-inline-start:2px solid var(--gold-soft);background:#fdfbf6;
-    border-radius:0 12px 12px 0;margin-top:8px}
+  /* threaded (nested) reply: tinted card with a clear thread line on the start edge */
+  .post.nested{border-bottom:0;border-inline-start:3px solid var(--gold);background:#fdfaf2;
+    border-radius:0 12px 12px 0;margin-top:8px;padding:14px 16px}
   .reply-to{display:inline-flex;align-items:center;gap:4px;font-size:.8rem;color:var(--muted);
     margin-bottom:6px;cursor:pointer;font-weight:600}
   .reply-to:hover{color:var(--gold)}
   .reply-to b{color:var(--ink);font-weight:800}
+  /* collapse/expand control + "N replies hidden" chip */
+  .thread-toggle{flex:0 0 auto;width:22px;height:22px;display:inline-grid;place-items:center;
+    background:var(--parch2);border:1px solid var(--line);border-radius:6px;cursor:pointer;
+    font-size:.7rem;color:var(--muted);line-height:1;padding:0}
+  .thread-toggle:hover{background:var(--gold-soft);color:#2b2208;border-color:var(--gold)}
+  .collapsed-count{font-size:.78rem;font-weight:800;color:var(--gold);background:#faf3e2;
+    border-radius:999px;padding:2px 10px;cursor:pointer;white-space:nowrap}
+  .collapsed-count:hover{background:var(--gold-soft);color:#2b2208}
   /* compose box "replying to …" banner */
   .reply-ctx-box{display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:var(--parch2);border-radius:10px;padding:7px 12px;font-size:.9rem;font-weight:600;color:var(--ink)}
@@ -598,6 +606,7 @@ let curPosts = [];        // posts of the open topic (so edit uses the RAW body,
 let curTopic = null;      // the open topic object (for solution_post_id / author checks)
 let curPostPage = 1;      // current page of posts within the open topic (paged by root)
 let replyTo = null;       // post id this reply targets (null = top-level reply)
+let collapsed = new Set();// post ids whose subtree is collapsed in the thread view
 const POSTS_PER_PAGE = 30;// conversation ROOTS per page (their full subtrees ride along)
 let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
 let allUsers = [];        // admin user-management cache (filtered client-side)
@@ -1285,6 +1294,7 @@ function gotoTopicPage(n){
 // permalink lands on — and scrolls to — the right page.
 async function openTopic(id, opts){
   opts = opts || {};
+  if (id !== curTopicId) collapsed = new Set();   // entering a different topic → expand all
   curTopicId = id;
   // the server returns ALL posts (threading needs the whole tree); paging is client-side
   const data = await api("/topics/" + id);
@@ -1380,23 +1390,32 @@ function pageOfPost(postId){
   const idx = roots.findIndex(r => r.id === cur.id);
   return idx < 0 ? 1 : Math.floor(idx / POSTS_PER_PAGE) + 1;
 }
-// Render the current page's roots + their full (nested) subtrees.
+// Render the current page's roots + their (nested) subtrees. Collapsed subtrees are
+// skipped; the collapsed post shows how many replies are hidden.
 function renderThread(){
   hideLikePop();
   const { byId, kids, roots } = buildThread();
   const count = Math.max(1, Math.ceil(roots.length / POSTS_PER_PAGE));
   if (curPostPage > count) curPostPage = count;
   const pageRoots = roots.slice((curPostPage - 1) * POSTS_PER_PAGE, curPostPage * POSTS_PER_PAGE);
+  const descCount = (pid) => { const k = kids.get(pid); if (!k) return 0; let n = k.length; for (const c of k) n += descCount(c.id); return n; };
   const flat = [];
   (function walk(list, depth){
-    for (const r of list){ flat.push([r, depth]); const k = kids.get(r.id); if (k) walk(k, depth + 1); }
+    for (const r of list){
+      const k = kids.get(r.id);
+      const hasKids = !!(k && k.length);
+      const isCol = hasKids && collapsed.has(r.id);
+      flat.push({ p: r, depth, hasKids, collapsed: isCol, hidden: isCol ? descCount(r.id) : 0 });
+      if (hasKids && !isCol) walk(k, depth + 1);
+    }
   })(pageRoots, 0);
-  $("posts").innerHTML = flat.map(([p, depth]) => postHtml(p, depth, byId)).join("");
+  $("posts").innerHTML = flat.map(o => postHtml(o, byId)).join("");
   wirePostActions();
   renderPostsPager(roots.length, POSTS_PER_PAGE, curPostPage);
 }
-// One post's HTML at nesting `depth`.
-function postHtml(p, depth, byId){
+// One post's HTML. `o` = { p, depth, hasKids, collapsed, hidden }.
+function postHtml(o, byId){
+  const p = o.p, depth = o.depth;
   const roleTag = p.author_role && p.author_role !== "member"
     ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
   const editedNote = p.edited_at
@@ -1427,17 +1446,25 @@ function postHtml(p, depth, byId){
     staff += `<button class="btn btn-light btn-sm" data-act="block" data-uid="${p.user_id}" data-name="${esc(p.author)}">חסום</button>`;
   if (atLeast("admin") && !mine)
     staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
+  // collapse/expand control — only when this post has replies under it
+  const toggle = o.hasKids
+    ? `<button class="thread-toggle" data-act="toggle" data-id="${p.id}" title="${o.collapsed?'הרחב שרשור':'צמצם שרשור'}">${o.collapsed?'▸':'▾'}</button>`
+    : "";
+  const collapsedTag = o.collapsed
+    ? `<span class="collapsed-count" data-act="toggle" data-id="${p.id}">${o.hidden} ${o.hidden===1?'תגובה מוסתרת':'תגובות מוסתרות'} — הצג</span>` : "";
   // "in reply to" context — clickable to jump to the parent (always on this page)
   const parent = p.reply_to ? byId.get(p.reply_to) : null;
   const replyCtx = parent
     ? `<div class="reply-to" data-act="gotopost" data-id="${parent.id}">↩ בתשובה ל<b>${esc(parent.author)}</b></div>` : "";
-  const ind = Math.min(depth, 6) * 22;   // cap the visual indent; the link still names the real parent
+  const ind = Math.min(depth, 6) * 24;   // cap the visual indent; the link still names the real parent
   return `<div class="post${isSolution?' solution':''}${depth?' nested':''}" id="post-${p.id}"${depth?` style="margin-inline-start:${ind}px"`:""}>
     ${replyCtx}
     <div class="post-head">
+      ${toggle}
       <span class="who">${esc(p.author)}</span>${roleTag}
       ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
       <span class="when">${when(p.created_at)}${editedNote}</span>
+      ${collapsedTag}
       ${staff?`<span class="staff-menu">${staff}</span>`:""}
     </div>
     <div class="post-body">${renderBody(p.body)}</div>
@@ -1455,6 +1482,7 @@ function wirePostActions(){
     if (act === "like")  return toggleLike(id);
     if (act === "reply") return setReplyTo(id);
     if (act === "gotopost") return jumpToPost(id);
+    if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
@@ -1465,6 +1493,11 @@ function wirePostActions(){
     el.onfocus = () => showLikePop(el);
     el.onblur = hideLikePop;
   });
+}
+// Collapse/expand a post's reply subtree (re-renders the current page).
+function toggleCollapse(id){
+  if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+  renderThread();
 }
 // Scroll to a post on the current page (gold flash); fall back to loading its page.
 function jumpToPost(id){
