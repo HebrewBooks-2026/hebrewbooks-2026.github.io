@@ -314,12 +314,17 @@
     min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;
     font-size:.68rem;font-weight:800;line-height:1}
   .bell-badge.hidden{display:none}
-  /* notifications list */
+  /* notifications list — new on top, older scroll below */
+  #notifList{max-height:60vh;overflow:auto}
+  .notif-sec{position:sticky;top:0;background:#fff;font-size:.72rem;font-weight:800;letter-spacing:.04em;
+    color:var(--gold);text-transform:uppercase;padding:8px 8px 6px;z-index:1}
+  .notif-sec-old{color:var(--muted)}
   .notif{display:flex;gap:10px;align-items:flex-start;padding:11px 8px;border-bottom:1px solid var(--line);
     cursor:pointer;border-radius:9px}
   .notif:hover{background:var(--parch)}
   .notif:last-child{border-bottom:0}
   .notif.unread{background:#fbf6e8}
+  .notif:not(.unread){opacity:.72}
   .notif-ic{font-size:1.05rem;flex:0 0 auto;line-height:1.3}
   .notif-tx{flex:1 1 auto;min-width:0;font-size:.92rem}
   .notif-tx b{font-weight:800}
@@ -1568,13 +1573,21 @@ function notifText(n){
 function renderNotifList(items){
   const box = $("notifList");
   if (!items.length){ box.innerHTML = `<div class="empty">אין התראות עדיין.</div>`; return; }
-  box.innerHTML = items.map(n => {
+  const row = (n) => {
     const tx = notifText(n);
     return `<div class="notif ${n.is_read?'':'unread'}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}">
       <span class="notif-ic">${tx.ic}</span>
       <span class="notif-tx">${tx.html}<div class="notif-when">${when(n.created_at)}</div></span>
     </div>`;
-  }).join("");
+  };
+  // new (unread) on top; older (already read) below — reachable by scrolling
+  const unread = items.filter(n => !n.is_read);
+  const read   = items.filter(n => n.is_read);
+  let html = unread.length
+    ? `<div class="notif-sec">חדשות</div>` + unread.map(row).join("")
+    : `<div class="empty" style="padding:16px">אין התראות חדשות.</div>`;
+  if (read.length) html += `<div class="notif-sec notif-sec-old">ישנות</div>` + read.map(row).join("");
+  box.innerHTML = html;
   box.querySelectorAll(".notif").forEach(el => el.onclick = () => {
     const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
     closeNotifications();
