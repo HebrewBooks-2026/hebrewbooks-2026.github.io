@@ -171,6 +171,18 @@
   .role-moderator{background:#dfe9f7;color:#274a86}
   .when{color:var(--muted);font-size:.83rem}
   .post-body{white-space:pre-wrap;word-break:break-word;font-size:1.04rem}
+  /* code: blocks are LTR, monospace, with a copy button; inline code is a small chip */
+  .code-block{position:relative;direction:ltr;margin:8px 0}
+  .post-body pre,.code-pre{direction:ltr;text-align:left;background:#1e2433;color:#e8eaf0;margin:0;
+    padding:14px 15px;border-radius:11px;overflow:auto;white-space:pre;tab-size:2;line-height:1.55;
+    font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9rem}
+  .post-body code,.code-inline{direction:ltr;unicode-bidi:embed;background:var(--parch2);color:#9a3b2f;
+    padding:1px 6px;border-radius:6px;font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9em}
+  .post-body pre code{background:none;color:inherit;padding:0}
+  .code-copy{position:absolute;top:7px;left:7px;background:rgba(255,255,255,.14);color:#fff;
+    border:1px solid rgba(255,255,255,.3);border-radius:7px;padding:3px 11px;font-size:.76rem;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  .code-copy:hover{background:rgba(255,255,255,.26)}
   .post-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
   .staff-menu{margin-inline-start:auto;display:flex;gap:6px}
   /* deep-linked post: gold flash + scroll-margin so it clears the sticky header */
@@ -705,6 +717,13 @@ function renderBody(text){
     return '<div class="rich">' + sanitizeHtml(src) + '</div>';
   }
   let h = esc(raw);
+  // 0) protect code FIRST (already HTML-escaped by esc), so URLs/newlines inside it are
+  //    left untouched. Fenced ```…``` → <pre>; inline `…` → <code>. Restored at the end.
+  const codeStore = [];
+  h = h.replace(/```\r?\n?([\s\S]*?)```/g, (_, code) =>
+    "\x00C" + (codeStore.push(`<pre class="code-pre">${code.replace(/\n$/, "")}</pre>`) - 1) + "\x00");
+  h = h.replace(/`([^`\r\n]+)`/g, (_, code) =>
+    "\x00C" + (codeStore.push(`<code class="code-inline">${code}</code>`) - 1) + "\x00");
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
@@ -722,7 +741,9 @@ function renderBody(text){
     if (m){ trail = m[0]; url = url.slice(0, -trail.length); }
     return pre + linkTag(url, url) + trail;
   });
-  return h.replace(/\n/g, "<br>");
+  h = h.replace(/\n/g, "<br>");
+  // restore code blocks (their inner newlines/URLs stay literal inside <pre>/<code>)
+  return h.replace(/\x00C(\d+)\x00/g, (_, i) => codeStore[+i]);
 }
 function when(ts){
   try { return new Date(ts*1000).toLocaleString("he-IL",{dateStyle:"medium",timeStyle:"short"}); }
@@ -1493,6 +1514,23 @@ function wirePostActions(){
     el.onfocus = () => showLikePop(el);
     el.onblur = hideLikePop;
   });
+  decorateCodeBlocks($("posts"));
+}
+// Wrap each code block in a container with a "copy" button (LTR, copies the raw text).
+function decorateCodeBlocks(root){
+  root.querySelectorAll(".post-body pre").forEach(pre => {
+    if (pre.parentElement && pre.parentElement.classList.contains("code-block")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "code-block";
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "code-copy"; btn.textContent = "העתק";
+    btn.onclick = () => navigator.clipboard.writeText(pre.textContent).then(
+      () => { btn.textContent = "✓ הועתק"; setTimeout(() => btn.textContent = "העתק", 1500); },
+      () => flash("ההעתקה נכשלה", "err"));
+    wrap.appendChild(btn);
+  });
 }
 // Collapse/expand a post's reply subtree (re-renders the current page).
 function toggleCollapse(id){
@@ -1689,6 +1727,7 @@ const HTML_FMT_BTNS = [
   { label: "כותרת",   title: "כותרת",                                        wrap: ["<h3>", "</h3>"] },
   { label: "• רשימה", title: "רשימה",                                        wrap: ["<ul>\n<li>", "</li>\n</ul>"] },
   { label: "❝ ציטוט", title: "ציטוט",                                        wrap: ["<blockquote>", "</blockquote>"] },
+  { label: "</> קוד", title: "בלוק קוד (LTR)", code: true },
   { label: "🎨 צבע",  title: "צבע טקסט",  color: true },
 ];
 function wrapSelection(ta, before, after){
@@ -1710,6 +1749,13 @@ function setMode(ta, mode){
   if (tog) tog.textContent = mode === "html" ? "✦ מצב עיצוב (HTML)" : "מצב טקסט רגיל";
 }
 function applyFormat(ta, b){
+  if (b.code){
+    // code lives in TEXT mode — renderBody turns ```…``` into an LTR <pre> block, and
+    // escaping happens there, so code containing <, >, & stays intact.
+    setMode(ta, "text");
+    wrapSelection(ta, "```\n", "\n```");
+    return;
+  }
   setMode(ta, "html");
   if (b.color){
     openModal({ title: "צבע טקסט",
@@ -1738,6 +1784,7 @@ function makeToolbar(ta){
   ta._toolbar = tb;
   ta.parentNode.insertBefore(tb, ta);
   setMode(ta, "text");
+  enableImagePaste(ta);   // paste an image from the clipboard straight into this box
 }
 // The body we send: HTML-mode posts get the marker prefix so the renderer sanitizes them.
 function composeBody(ta){
@@ -1777,13 +1824,12 @@ async function insertLink(textarea){
   // Drop it where the words were selected (or at the caret if nothing was selected).
   replaceRange(textarea, s, e, snippet);
 }
-async function uploadAndInsert(input, textarea){
-  const file = input.files && input.files[0];
-  input.value = "";  // allow re-picking the same file later
+// Upload one image File/Blob (from the picker OR a clipboard paste) and embed it.
+async function uploadImageFile(file, textarea){
   if (!file) return;
   flash("מעלה תמונה…", "ok");
   try{
-    const fd = new FormData(); fd.append("image", file);
+    const fd = new FormData(); fd.append("image", file, file.name || "pasted.png");
     const headers = {}; if (token) headers["Authorization"] = "Bearer " + token;
     const res = await fetch(API + "/upload", { method:"POST", headers, body:fd });
     const data = await res.json().catch(() => ({}));
@@ -1791,6 +1837,23 @@ async function uploadAndInsert(input, textarea){
     insertAtCursor(textarea, textarea.dataset.mode === "html" ? `\n<img src="${data.url}">\n` : `\n![](${data.url})\n`);
     flash("התמונה הוטמעה — שלח כדי לפרסם.", "ok");
   } catch(e){ flash(e.message, "err"); }
+}
+async function uploadAndInsert(input, textarea){
+  const file = input.files && input.files[0];
+  input.value = "";  // allow re-picking the same file later
+  await uploadImageFile(file, textarea);
+}
+// Let users paste an image straight from the clipboard into a compose box.
+function enableImagePaste(ta){
+  ta.addEventListener("paste", (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (const it of items){
+      if (it.type && it.type.startsWith("image/")){
+        const file = it.getAsFile();
+        if (file){ e.preventDefault(); uploadImageFile(file, ta); return; }
+      }
+    }
+  });
 }
 async function deletePost(id){
   if (!await confirmDialog("מחיקת הודעה", "למחוק את ההודעה?", "מחק")) return;
