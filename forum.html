@@ -142,6 +142,20 @@
   /* posts */
   .post{padding:18px;border-bottom:1px solid var(--line)}
   .post:last-child{border-bottom:0}
+  /* threaded (nested) reply: tinted, with a thread line on the start edge */
+  .post.nested{border-bottom:0;border-inline-start:2px solid var(--gold-soft);background:#fdfbf6;
+    border-radius:0 12px 12px 0;margin-top:8px}
+  .reply-to{display:inline-flex;align-items:center;gap:4px;font-size:.8rem;color:var(--muted);
+    margin-bottom:6px;cursor:pointer;font-weight:600}
+  .reply-to:hover{color:var(--gold)}
+  .reply-to b{color:var(--ink);font-weight:800}
+  /* compose box "replying to …" banner */
+  .reply-ctx-box{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--parch2);border-radius:10px;padding:7px 12px;font-size:.9rem;font-weight:600;color:var(--ink)}
+  .reply-ctx-box.hidden{display:none}
+  .reply-ctx-box b{font-weight:800}
+  .reply-x{background:transparent;border:0;cursor:pointer;font-size:1rem;color:var(--muted);line-height:1;padding:2px 6px;border-radius:7px}
+  .reply-x:hover{color:var(--danger);background:#fff}
   .post-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
   .who{font-weight:800}
   .role-tag{font-size:.72rem;font-weight:800;border-radius:999px;padding:2px 9px}
@@ -395,6 +409,7 @@
     <div id="postsPager" class="pager hidden"></div>
     <div id="replyBox" class="card hidden" style="margin-top:16px">
       <form class="compose" id="replyForm">
+        <div id="replyCtx" class="reply-ctx-box hidden"></div>
         <label class="fld">תגובה</label>
         <textarea class="in" id="replyBody" placeholder="כתוב תגובה..." required></textarea>
         <div class="compose-policy">⚠ בשליחה אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
@@ -576,7 +591,9 @@ let topicPage = 1;        // current page of the topic list (reset to 1 on filte
 let curTopicId = null;
 let curPosts = [];        // posts of the open topic (so edit uses the RAW body, not rendered)
 let curTopic = null;      // the open topic object (for solution_post_id / author checks)
-let curPostPage = 1;      // current page of posts within the open topic
+let curPostPage = 1;      // current page of posts within the open topic (paged by root)
+let replyTo = null;       // post id this reply targets (null = top-level reply)
+const POSTS_PER_PAGE = 30;// conversation ROOTS per page (their full subtrees ride along)
 let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
 let allUsers = [];        // admin user-management cache (filtered client-side)
 let searchQuery = "";     // topic search term (matched server-side on title + posts)
@@ -1264,14 +1281,14 @@ function gotoTopicPage(n){
 async function openTopic(id, opts){
   opts = opts || {};
   curTopicId = id;
-  let url = "/topics/" + id;
-  const anchor = opts.page ? null : (location.hash.match(/[#&]post=(\d+)/) || [])[1];
-  if (opts.page) url += "?page=" + opts.page;
-  else if (anchor) url += "?post=" + anchor;
-  const data = await api(url);
+  // the server returns ALL posts (threading needs the whole tree); paging is client-side
+  const data = await api("/topics/" + id);
   const t = data.topic;
   curTopic = t;
-  curPostPage = data.post_page || 1;
+  curPosts = data.posts;
+  // pick the page: explicit (pager) → the page holding a "&post=" anchor → page 1
+  const anchor = opts.page ? null : (location.hash.match(/[#&]post=(\d+)/) || [])[1];
+  curPostPage = opts.page || (anchor ? pageOfPost(parseInt(anchor, 10)) : 1);
   $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
 
   // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
@@ -1296,10 +1313,10 @@ async function openTopic(id, opts){
     $("delTopicBtn").onclick = () => modDeleteTopic(id);
   }
 
-  renderPosts(data.posts);
-  renderPostsPager(data.posts_total || 0, data.posts_page_size || 20, curPostPage);
+  renderThread();
 
   // reply box / locked note
+  clearReplyTo();
   const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
@@ -1335,54 +1352,93 @@ function gotoPostPage(n){
   openTopic(curTopicId, { page: n });
 }
 
-function renderPosts(posts){
-  curPosts = posts;
-  hideLikePop();   // drop any open like-popover before its anchor is replaced
-  $("posts").innerHTML = posts.map(p => {
-    const roleTag = p.author_role && p.author_role !== "member"
-      ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
-    const editedNote = p.edited_at
-      ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name) ? ` · נערך ע"י ${esc(p.editor_name)}` : " · נערך")
-      : "";
-    const mine = me && me.id === p.user_id;
-    const isSolution = !!(curTopic && curTopic.solution_post_id === p.id);
-    // the asker (topic author) or a moderator+ may mark/unmark the accepted answer
-    const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
-    let actions = "";
-    // like — 👍 toggles (click handler deals with sign-in/approval); the count next to
-    // it (shown only when >0) reveals WHO liked in a styled popover on hover/focus.
-    actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍</button>`;
-    if (p.like_count > 0)
-      actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
-    if (mine || atLeast("moderator")){
-      actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
-      actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
-    }
-    // permalink — available to everyone, copies a direct link to this post
-    actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
-    if (canMarkSolution){
-      actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
-    }
-    // staff tools on OTHER users
-    let staff = "";
-    if (atLeast("moderator") && !mine){
-      staff += `<button class="btn btn-light btn-sm" data-act="block" data-uid="${p.user_id}" data-name="${esc(p.author)}">חסום</button>`;
-    }
-    if (atLeast("admin") && !mine){
-      staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
-    }
-    return `<div class="post${isSolution?' solution':''}" id="post-${p.id}">
-      <div class="post-head">
-        <span class="who">${esc(p.author)}</span>${roleTag}
-        ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
-        <span class="when">${when(p.created_at)}${editedNote}</span>
-        ${staff?`<span class="staff-menu">${staff}</span>`:""}
-      </div>
-      <div class="post-body">${renderBody(p.body)}</div>
-      ${actions?`<div class="post-actions">${actions}</div>`:""}
-    </div>`;
-  }).join("");
-
+// Build the reply tree from the flat post list. A post whose parent is missing
+// (deleted) becomes a root. Children arrays inherit curPosts' chronological order.
+function buildThread(){
+  const byId = new Map(curPosts.map(p => [p.id, p]));
+  const kids = new Map();
+  const roots = [];
+  for (const p of curPosts){
+    const par = (p.reply_to && byId.has(p.reply_to)) ? p.reply_to : null;
+    if (par == null) roots.push(p);
+    else (kids.get(par) || kids.set(par, []).get(par)).push(p);
+  }
+  return { byId, kids, roots };
+}
+// Which page holds a post — by its conversation ROOT's position (whole subtrees stay
+// on one page, so a post and its parent are always together).
+function pageOfPost(postId){
+  const { byId, roots } = buildThread();
+  let cur = byId.get(postId);
+  if (!cur) return 1;
+  while (cur.reply_to && byId.has(cur.reply_to)) cur = byId.get(cur.reply_to);
+  const idx = roots.findIndex(r => r.id === cur.id);
+  return idx < 0 ? 1 : Math.floor(idx / POSTS_PER_PAGE) + 1;
+}
+// Render the current page's roots + their full (nested) subtrees.
+function renderThread(){
+  hideLikePop();
+  const { byId, kids, roots } = buildThread();
+  const count = Math.max(1, Math.ceil(roots.length / POSTS_PER_PAGE));
+  if (curPostPage > count) curPostPage = count;
+  const pageRoots = roots.slice((curPostPage - 1) * POSTS_PER_PAGE, curPostPage * POSTS_PER_PAGE);
+  const flat = [];
+  (function walk(list, depth){
+    for (const r of list){ flat.push([r, depth]); const k = kids.get(r.id); if (k) walk(k, depth + 1); }
+  })(pageRoots, 0);
+  $("posts").innerHTML = flat.map(([p, depth]) => postHtml(p, depth, byId)).join("");
+  wirePostActions();
+  renderPostsPager(roots.length, POSTS_PER_PAGE, curPostPage);
+}
+// One post's HTML at nesting `depth`.
+function postHtml(p, depth, byId){
+  const roleTag = p.author_role && p.author_role !== "member"
+    ? ` <span class="role-tag role-${p.author_role}">${p.author_role==="admin"?"מנהל":"מודרטור"}</span>` : "";
+  const editedNote = p.edited_at
+    ? ((p.edited_by && p.edited_by !== p.user_id && p.editor_name) ? ` · נערך ע"י ${esc(p.editor_name)}` : " · נערך")
+    : "";
+  const mine = me && me.id === p.user_id;
+  const isSolution = !!(curTopic && curTopic.solution_post_id === p.id);
+  const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
+  const canReply = canPost() && curTopic && (!curTopic.is_locked || atLeast("moderator"));
+  let actions = "";
+  // like — 👍 toggles; the count (when >0) reveals who liked on hover.
+  actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍</button>`;
+  if (p.like_count > 0)
+    actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
+  if (canReply)
+    actions += `<button class="btn btn-light btn-sm" data-act="reply" data-id="${p.id}">↩ השב</button>`;
+  if (mine || atLeast("moderator")){
+    actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
+    actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
+  }
+  actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
+  if (canMarkSolution)
+    actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
+  let staff = "";
+  if (atLeast("moderator") && !mine)
+    staff += `<button class="btn btn-light btn-sm" data-act="block" data-uid="${p.user_id}" data-name="${esc(p.author)}">חסום</button>`;
+  if (atLeast("admin") && !mine)
+    staff += `<button class="btn btn-light btn-sm" data-act="role" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}">תפקיד</button>`;
+  // "in reply to" context — clickable to jump to the parent (always on this page)
+  const parent = p.reply_to ? byId.get(p.reply_to) : null;
+  const replyCtx = parent
+    ? `<div class="reply-to" data-act="gotopost" data-id="${parent.id}">↩ בתשובה ל<b>${esc(parent.author)}</b></div>` : "";
+  const ind = Math.min(depth, 6) * 22;   // cap the visual indent; the link still names the real parent
+  return `<div class="post${isSolution?' solution':''}${depth?' nested':''}" id="post-${p.id}"${depth?` style="margin-inline-start:${ind}px"`:""}>
+    ${replyCtx}
+    <div class="post-head">
+      <span class="who">${esc(p.author)}</span>${roleTag}
+      ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
+      <span class="when">${when(p.created_at)}${editedNote}</span>
+      ${staff?`<span class="staff-menu">${staff}</span>`:""}
+    </div>
+    <div class="post-body">${renderBody(p.body)}</div>
+    ${actions?`<div class="post-actions">${actions}</div>`:""}
+  </div>`;
+}
+// Wire the data-act buttons + like-count hover for the rendered posts.
+function wirePostActions(){
   $("posts").querySelectorAll("[data-act]").forEach(el => el.onclick = () => {
     const act = el.getAttribute("data-act");
     const id = parseInt(el.getAttribute("data-id"),10);
@@ -1390,17 +1446,48 @@ function renderPosts(posts){
     if (act === "edit")  return openEdit(id);
     if (act === "link")  return sharePost(id);
     if (act === "like")  return toggleLike(id);
+    if (act === "reply") return setReplyTo(id);
+    if (act === "gotopost") return jumpToPost(id);
     if (act === "solution") return markSolution(id);
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
-  // hover/focus the like count → styled "who liked" popover (names embedded in the post)
   $("posts").querySelectorAll(".like-count").forEach(el => {
     el.onmouseenter = () => showLikePop(el);
     el.onmouseleave = hideLikePop;
     el.onfocus = () => showLikePop(el);
     el.onblur = hideLikePop;
   });
+}
+// Scroll to a post on the current page (gold flash); fall back to loading its page.
+function jumpToPost(id){
+  const el = document.getElementById("post-" + id);
+  if (el){
+    el.scrollIntoView({ behavior:"smooth", block:"center" });
+    el.classList.remove("flash-target"); void el.offsetWidth; el.classList.add("flash-target");
+  } else {
+    history.replaceState(null, "", "#topic=" + curTopicId + "&post=" + id);
+    openTopic(curTopicId);
+  }
+}
+// Reply targeting: aim the compose box at a specific post (threaded reply).
+function setReplyTo(id){
+  if (!me) return openAuth();
+  if (!canPost()){ flash("רק חברים מאושרים יכולים להגיב.", "err"); return; }
+  replyTo = id;
+  const p = curPosts.find(x => x.id === id);
+  const ctx = $("replyCtx");
+  ctx.innerHTML = `<span>↩ בתשובה ל<b>${esc(p ? p.author : "")}</b></span>` +
+    `<button type="button" id="replyCtxX" class="reply-x" title="ביטול">✕</button>`;
+  ctx.classList.remove("hidden");
+  $("replyCtxX").onclick = clearReplyTo;
+  $("replyBox").scrollIntoView({ behavior:"smooth", block:"center" });
+  $("replyBody").focus();
+}
+function clearReplyTo(){
+  replyTo = null;
+  const c = $("replyCtx");
+  if (c){ c.classList.add("hidden"); c.innerHTML = ""; }
 }
 // Styled popover listing who liked a post — instant (names come embedded as
 // p.liker_names, '||'-joined). position:fixed, clamped to the viewport, flips above
@@ -1432,7 +1519,7 @@ async function toggleLike(postId){
     const r = await api(`/posts/${postId}/like`, { method:"POST" });
     const p = curPosts.find(x => x.id === postId);
     if (p){ p.liked_by_me = r.liked ? 1 : 0; p.like_count = r.like_count; p.liker_names = r.liker_names; }
-    renderPosts(curPosts);                          // re-render so the count + popover list stay in sync
+    renderThread();                                 // re-render so the count + popover list stay in sync
   } catch(e){ flash(e.message, "err"); }
 }
 // Toggle the topic's accepted answer. Re-marking the current solution clears it.
@@ -1441,7 +1528,7 @@ async function markSolution(postId){
     const r = await api(`/topics/${curTopicId}/solution`, { method:"PATCH", body:{ post_id: postId }});
     if (curTopic) curTopic.solution_post_id = r.solution_post_id;
     flash(r.solution_post_id ? "התגובה סומנה כפתרון." : "סימון הפתרון בוטל.", "ok");
-    renderPosts(curPosts);
+    renderThread();
   } catch(e){ flash(e.message, "err"); }
 }
 // Follow/unfollow the open topic — drives whether new replies notify you.
@@ -1526,9 +1613,10 @@ async function submitNewTopic(){
 }
 async function submitReply(id){
   try{
-    const r = await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")) }});
+    const r = await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")), reply_to: replyTo }});
     $("replyBody").value = ""; setMode($("replyBody"), "text");
-    // jump to the new reply (server resolves its page → the last one) and scroll to it;
+    clearReplyTo();
+    // jump to the page holding the new reply (its conversation root) and scroll to it;
     // replaceState keeps the Back button clean.
     if (r.post_id) history.replaceState(null, "", "#topic=" + id + "&post=" + r.post_id);
     openTopic(id);
@@ -1927,10 +2015,10 @@ $("notifClose").onclick = closeNotifications;
 $("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
 // ---- auto-refresh: keep the list / open topic live without a manual reload --------
 async function refreshOpenTopicPosts(){
-  const data = await api("/topics/" + curTopicId + "?page=" + curPostPage);
+  const data = await api("/topics/" + curTopicId);
   curTopic = data.topic;
-  renderPosts(data.posts);
-  renderPostsPager(data.posts_total || 0, data.posts_page_size || 30, data.post_page || curPostPage);
+  curPosts = data.posts;
+  renderThread();   // keeps the current page (clamped) + rebuilds the tree
 }
 // One periodic tick (every 30s). The header badges — notifications + the admin
 // pending-requests count — are non-intrusive, so they ALWAYS update, even with a
