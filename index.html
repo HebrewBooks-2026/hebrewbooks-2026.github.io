@@ -236,6 +236,23 @@
   .req{text-align:center;color:var(--muted);margin-top:34px;font-size:.95rem}
   .req b{color:var(--ink)}
 
+  /* ---------- Order-drive callout ---------- */
+  .order{background:radial-gradient(1100px 500px at 80% -20%,rgba(70,108,180,.4) 0,transparent 60%),
+              linear-gradient(160deg,var(--navy) 0%,var(--navy2) 60%,#26406e 100%);
+         position:relative;overflow:hidden}
+  .order::after{content:"";position:absolute;inset:0;opacity:.07;pointer-events:none;
+    background-image:radial-gradient(circle at 1px 1px,#fff 1px,transparent 0);background-size:26px 26px}
+  .order-card{position:relative;z-index:2;max-width:780px;margin:0 auto;
+    background:rgba(255,255,255,.05);border:1px solid rgba(231,200,118,.4);border-radius:24px;
+    padding:44px 38px;text-align:center;box-shadow:var(--shadow-lg)}
+  .order-card .badge{margin-bottom:18px}
+  .order-card h2{color:#fff;font-size:clamp(1.7rem,3.3vw,2.5rem);font-weight:900;margin-bottom:16px;line-height:1.15}
+  .order-card h2 .accent{color:var(--amber)}
+  .order-card p{color:#d9e0f0;font-size:1.1rem;max-width:620px;margin:0 auto 14px}
+  .order-card p b{color:#f3e3bd}
+  .order-card .btn{margin-top:12px}
+  .order-card .disclaimer{font-size:.92rem;color:#aeb8d0;opacity:.85;margin-top:22px;max-width:600px}
+
   /* ---------- Steps ---------- */
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;counter-reset:s}
   @media(max-width:780px){.steps{grid-template-columns:1fr}}
@@ -264,6 +281,7 @@
       <div class="nav-links">
         <a href="#features">תכונות</a>
         <a href="#download">הורדה</a>
+        <a href="#order-drive">הזמנת כונן</a>
         <a href="#install">התקנה</a>
         <a href="forum.html">פורום</a>
         <a href="help.html">עזרה</a>
@@ -407,6 +425,21 @@
 
     <p class="req">דרישות מערכת: <b>Windows 10 / 11</b> · הספרייה (קבצי ה-PDF) מסופקת בנפרד על כונן.
       &nbsp;·&nbsp; <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:600">כל הגרסאות ←</a></p>
+  </div>
+</section>
+
+<section id="order-drive" class="order">
+  <div class="wrap">
+    <div class="order-card">
+      <span class="badge"><span class="dot"></span> הזמנת כונן</span>
+      <h2 class="serif">רוצה את <span class="accent">כל המאגר</span> על כונן?</h2>
+      <p>ניתן להזמין כונן הכולל את <b>המאגר המלא</b> — כל הספרייה מוכנה לחיבור למחשב והפעלה מיידית.</p>
+      <a class="btn btn-gold" href="https://hebrewbooks.kesug.com/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
+        להזמנת כונן ←
+      </a>
+      <p class="disclaimer">הזמנת הכוננים נעשית על ידי <b>גורם חיצוני, ללא מטרות רווח</b>. השירות אינו באחריותנו, ולכל שאלה יש לפנות אל הגורם האחראי על חלוקת הכוננים.</p>
+    </div>
   </div>
 </section>
 
