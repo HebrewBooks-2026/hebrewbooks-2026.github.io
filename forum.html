@@ -126,6 +126,7 @@
   .topic-row:hover{background:#fbf8f0}
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
+  .act-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   /* site-wide activity feed rows */
   .activity-row{padding:13px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s}
   .activity-row:last-child{border-bottom:0}
@@ -500,7 +501,10 @@
   <!-- ===== site-wide activity feed ===== -->
   <section id="viewActivity" class="hidden">
     <span class="back" id="backFromActivity">→ חזרה לנושאים</span>
-    <div class="panel-head"><h1>פעילות אחרונה</h1></div>
+    <div class="panel-head act-head">
+      <h1>פעילות אחרונה</h1>
+      <button id="followAllBtn" class="btn btn-light follow-btn hidden" type="button"></button>
+    </div>
     <div id="activityList" class="card"></div>
     <div id="activityPager" class="pager hidden"></div>
   </section>
@@ -1357,7 +1361,28 @@ function goActivity(){
 function showActivity(){
   show("viewActivity");
   curTopicId = null;
+  renderFollowAllBtn();
   loadActivity();
+}
+// "Follow all activity" toggle — only meaningful for an approved member (they can get
+// notifications). Reflects me.follow_all; green when on (reuses .follow-btn.on).
+function renderFollowAllBtn(){
+  const btn = $("followAllBtn");
+  if (!me || !canPost()){ btn.classList.add("hidden"); return; }
+  btn.classList.remove("hidden");
+  const on = !!me.follow_all;
+  btn.classList.toggle("on", on);
+  btn.textContent = on ? "🔔 עוקב/ת אחרי הכל" : "🔔 עקוב אחרי כל הפעילות";
+}
+async function toggleFollowAllPref(){
+  if (!me) return;
+  const next = !me.follow_all;
+  try{
+    const r = await api("/follow-all", { method:"POST", body:{ on: next } });
+    me.follow_all = r.follow_all;
+    renderFollowAllBtn();
+    flash(me.follow_all ? "מעכשיו תקבל התראה על כל פעילות חדשה באתר." : "ביטלת מעקב אחרי כל הפעילות.", "ok");
+  } catch(e){ flash(e.message, "err"); }
 }
 async function loadActivity(){
   const box = $("activityList");
@@ -1735,6 +1760,7 @@ function notifText(n){
     case "reply":    return { ic:"💬", html:`${who} הגיב ב־${topic}` };
     case "like":     return { ic:"👍", html:`${who} סימן לייק לתגובה שלך ב־${topic}` };
     case "solution": return { ic:"✓",  html:`${who} סימן את התגובה שלך כפתרון ב־${topic}` };
+    case "activity": return { ic:"📋", html:`פעילות חדשה: ${who} ב־${topic}` };
     default:         return { ic:"🔔", html:`${who} · ${topic}` };
   }
 }
@@ -2278,6 +2304,7 @@ $("backFromTopic").onclick = goList;
 $("backFromNew").onclick = () => show("viewList");
 $("backFromActivity").onclick = goList;
 $("activityBtn").onclick = goActivity;
+$("followAllBtn").onclick = toggleFollowAllPref;
 $("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
 $("addCatBtn").onclick = () => addCategory();
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
