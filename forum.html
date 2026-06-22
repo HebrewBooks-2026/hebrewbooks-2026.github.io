@@ -126,6 +126,15 @@
   .topic-row:hover{background:#fbf8f0}
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
+  /* site-wide activity feed rows */
+  .activity-row{padding:13px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s}
+  .activity-row:last-child{border-bottom:0}
+  .activity-row:hover{background:#fbf8f0}
+  .activity-row .act-line{font-size:1rem}
+  .activity-row .act-topic{font-weight:700;color:var(--indigo)}
+  .activity-row .act-snippet{color:var(--ink);font-size:.9rem;margin-top:3px;opacity:.85;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
   /* numbered pager under the topic list */
   .pager{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin-top:14px}
@@ -387,6 +396,7 @@
     <nav class="nav">
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
+        <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
         <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
@@ -485,6 +495,14 @@
         </div>
       </form>
     </div>
+  </section>
+
+  <!-- ===== site-wide activity feed ===== -->
+  <section id="viewActivity" class="hidden">
+    <span class="back" id="backFromActivity">→ חזרה לנושאים</span>
+    <div class="panel-head"><h1>פעילות אחרונה</h1></div>
+    <div id="activityList" class="card"></div>
+    <div id="activityPager" class="pager hidden"></div>
   </section>
 </main>
 
@@ -780,7 +798,7 @@ function flash(text, kind){
   if (kind !== "err") setTimeout(()=>{ m.className = "msg"; }, 3500);
 }
 function show(view){
-  for (const v of ["viewList","viewTopic","viewNew"]) $(v).classList.toggle("hidden", v !== view);
+  for (const v of ["viewList","viewTopic","viewNew","viewActivity"]) $(v).classList.toggle("hidden", v !== view);
   $("viewList").classList.toggle("layout", view === "viewList");
   window.scrollTo(0,0);
 }
@@ -1325,6 +1343,59 @@ function gotoTopicPage(n){
   topicPage = n;
   loadTopics();
   $("listTitle").scrollIntoView({ behavior:"smooth", block:"start" });  // start new page at the top
+}
+
+// ====== site-wide activity feed ======
+// A chronological "what's new across the whole forum" view: newest posts (each a new
+// topic's opening post or a reply), paginated, each clickable straight to the post.
+let activityPage = 1;
+function goActivity(){
+  if (location.hash !== "#activity") history.pushState(null, "", "#activity");
+  activityPage = 1;
+  showActivity();
+}
+function showActivity(){
+  show("viewActivity");
+  curTopicId = null;
+  loadActivity();
+}
+async function loadActivity(){
+  const box = $("activityList");
+  box.innerHTML = `<div class="empty">טוען…</div>`;
+  let data;
+  try{ data = await api("/activity?page=" + activityPage); }
+  catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!data.activity.length){ box.innerHTML = `<div class="empty">אין עדיין פעילות.</div>`; renderActivityPager(0, data.page_size||30); return; }
+  box.innerHTML = data.activity.map(a => {
+    const verb = a.is_opening ? "פתח/ה נושא" : "הגיב/ה ב";
+    return `<div class="activity-row" data-topic="${a.topic_id}" data-post="${a.id}">
+      <div class="act-line"><b>${esc(a.author)}</b> ${verb} <span class="act-topic">${esc(a.topic_title)}</span></div>
+      ${a.snippet?`<div class="act-snippet">${esc(a.snippet)}</div>`:""}
+      <div class="act-when">${when(a.created_at)}</div>
+    </div>`;
+  }).join("");
+  renderActivityPager(data.total||0, data.page_size||30);
+  box.querySelectorAll(".activity-row").forEach(el => el.onclick = () => {
+    const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
+    history.pushState(null, "", "#topic=" + tid + (pid ? "&post=" + pid : ""));
+    routeFromHash();
+  });
+}
+function renderActivityPager(total, pageSize){
+  const box = $("activityPager");
+  const count = Math.max(1, Math.ceil(total / pageSize));
+  if (count <= 1){ box.classList.add("hidden"); box.innerHTML = ""; return; }
+  activityPage = Math.min(activityPage, count);
+  let html = `<button class="pg-btn" data-pg="${activityPage-1}" ${activityPage<=1?"disabled":""}>הקודם</button>`;
+  for (const n of pageWindow(activityPage, count))
+    html += n === "…" ? `<span class="pg-gap">…</span>` : `<button class="pg-btn ${n===activityPage?"on":""}" data-pg="${n}">${n}</button>`;
+  html += `<button class="pg-btn" data-pg="${activityPage+1}" ${activityPage>=count?"disabled":""}>הבא</button>`;
+  box.innerHTML = html; box.classList.remove("hidden");
+  box.querySelectorAll(".pg-btn").forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    const n = parseInt(b.getAttribute("data-pg"),10);
+    if (n !== activityPage){ activityPage = n; loadActivity(); window.scrollTo(0,0); }
+  });
 }
 
 // ====== single topic ======
@@ -2191,6 +2262,10 @@ function routeFromHash(){
     else scrollToHashPost();   // already on this topic, post is on-screen — just jump to it
     return;
   }
+  if (location.hash === "#activity"){
+    if ($("viewActivity").classList.contains("hidden")) showActivity();
+    return;
+  }
   // list route: "#cat=<id>" filters by a category; anything else (incl. empty) = all.
   const mc = location.hash.match(/^#cat=(\d+)/);
   const wantCat = mc ? parseInt(mc[1], 10) : null;
@@ -2201,6 +2276,8 @@ function routeFromHash(){
 // ====== init ======
 $("backFromTopic").onclick = goList;
 $("backFromNew").onclick = () => show("viewList");
+$("backFromActivity").onclick = goList;
+$("activityBtn").onclick = goActivity;
 $("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
 $("addCatBtn").onclick = () => addCategory();
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
@@ -2304,6 +2381,8 @@ async function autoRefresh(){
       const rb = $("replyBody");
       if (document.activeElement === rb || (rb && rb.value.trim())) return;   // don't clobber a draft
       await refreshOpenTopicPosts();
+    } else if (!$("viewActivity").classList.contains("hidden")){
+      await loadActivity();            // keep the activity feed live (same page)
     }
   } catch {}   // a transient fetch error must never break the timer
 }
