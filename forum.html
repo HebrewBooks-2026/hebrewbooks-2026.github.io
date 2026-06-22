@@ -1934,11 +1934,17 @@ function renderMention(ta){
     `<div class="mention-item ${i===mentionIdx?'on':''}" data-i="${i}">` +
     `<span class="avatar">${esc((u.display_name||"?").slice(0,1))}</span>@${esc(u.display_name)}</div>`
   ).join("");
+  pop.classList.remove("hidden");                        // reveal FIRST so we can measure it
+  // Position with the same proven logic as the who-liked popover: align the popup's right
+  // edge to the box (RTL), clamp inside the viewport, and flip above if it would overflow.
   const r = ta.getBoundingClientRect();
-  pop.style.top = (r.bottom + 4) + "px";                 // just below the box (position:fixed)
-  pop.style.right = (document.documentElement.clientWidth - r.right) + "px";  // RTL: align right edges
-  pop.style.left = "auto";
-  pop.classList.remove("hidden");
+  let left = r.right - pop.offsetWidth;
+  left = Math.max(8, Math.min(left, window.innerWidth - 8 - pop.offsetWidth));
+  let top = r.bottom + 4;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = r.top - 4 - pop.offsetHeight;
+  pop.style.left = left + "px";
+  pop.style.right = "auto";
+  pop.style.top = Math.max(8, top) + "px";
   pop.querySelectorAll(".mention-item").forEach(el =>
     el.onmousedown = (e) => { e.preventDefault(); pickMention(parseInt(el.dataset.i,10)); });
 }
