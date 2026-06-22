@@ -176,6 +176,8 @@
   .post-body pre,.code-pre{direction:ltr;text-align:left;background:#1e2433;color:#e8eaf0;margin:0;
     padding:14px 15px;border-radius:11px;overflow:auto;white-space:pre;tab-size:2;line-height:1.55;
     font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9rem}
+  .post-body .mention{color:var(--indigo);font-weight:700;background:var(--parch2);
+    border-radius:5px;padding:0 4px;white-space:nowrap}
   .post-body code,.code-inline{direction:ltr;unicode-bidi:embed;background:var(--parch2);color:#9a3b2f;
     padding:1px 6px;border-radius:6px;font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9em}
   .post-body pre code{background:none;color:inherit;padding:0}
@@ -734,6 +736,15 @@ function renderBody(text){
     "\x00C" + (codeStore.push(`<pre class="code-pre">${code.replace(/\n$/, "")}</pre>`) - 1) + "\x00");
   h = h.replace(/`([^`\r\n]+)`/g, (_, code) =>
     "\x00C" + (codeStore.push(`<code class="code-inline">${code}</code>`) - 1) + "\x00");
+  // 0.5) highlight "@<known display name>" mentions. Runs before links/images so the only
+  //    HTML present is the escaped text + code placeholders — a clean text match. "@" must
+  //    start the line or follow whitespace (emails/URLs never trigger), names are tried
+  //    longest-first, and a trailing letter/digit boundary stops partial-word matches.
+  if (mentionNames.length){
+    const alt = mentionNames.map(n => escRe(esc(n))).join("|");
+    const re = new RegExp("(^|\\s)@(" + alt + ")(?![\\p{L}\\p{N}])", "gu");
+    h = h.replace(re, (_, pre, name) => pre + '<span class="mention">@' + name + '</span>');
+  }
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
@@ -1332,6 +1343,9 @@ async function openTopic(id, opts){
   const t = data.topic;
   curTopic = t;
   curPosts = data.posts;
+  // seed @mention highlighting from this thread's participants (author + repliers)
+  noteMentionNames(curPosts.map(p => p.author));
+  if (t.author) noteMentionNames([t.author]);
   // pick the page: explicit (pager) → the page holding a "&post=" anchor → page 1
   const anchor = opts.page ? null : (location.hash.match(/[#&]post=(\d+)/) || [])[1];
   curPostPage = opts.page || (anchor ? pageOfPost(parseInt(anchor, 10)) : 1);
@@ -1879,6 +1893,16 @@ let mentionState = null;       // {ta, atPos, caret} while the popup is open
 let mentionItems = [];         // current suggestions
 let mentionIdx = 0;            // highlighted row
 let mentionTimer = null;
+// Known display names for HIGHLIGHTING "@name" in rendered posts. Seeded from a thread's
+// participants (openTopic) and from autocomplete picks. Kept sorted longest-first so a
+// multi-word nickname ("@משה פורמן") highlights whole, not just its first word.
+let mentionNames = [];
+function noteMentionNames(arr){
+  let added = false;
+  for (const n of arr || []){ if (n && !mentionNames.includes(n)){ mentionNames.push(n); added = true; } }
+  if (added) mentionNames.sort((a,b) => b.length - a.length);
+}
+function escRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function enableMention(ta){
   ta.addEventListener("input", () => updateMention(ta));
   ta.addEventListener("keydown", (e) => mentionKeydown(e, ta));
@@ -1897,6 +1921,7 @@ function updateMention(ta){
     try{
       const r = await api("/members?q=" + encodeURIComponent(q));
       mentionItems = r.members || [];
+      noteMentionNames(mentionItems.map(u => u.display_name));   // so picks highlight on render
       mentionIdx = 0;
       renderMention(ta);
     } catch{ hideMention(); }
