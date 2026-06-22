@@ -1070,12 +1070,14 @@ function renderUsers(){
       <td><div class="u-name">${esc(u.display_name)}${self?' <span class="u-sub">(אתה)</span>':''}</div>
           <div class="u-sub">${esc(u.full_name||"")}</div></td>
       <td class="u-sub">${esc(u.email)}</td>
+      <td class="u-sub">${u.created_at ? whenDate(u.created_at) : ""}</td>
+      <td>${u.post_count ?? 0}</td>
       <td>${STATUS_LABEL[u.status]||esc(u.status)}${blockedTag}</td>
       <td><div class="u-acts">${roleSel}${actions}</div></td>
     </tr>`;
   }).join("");
   $("usersList").innerHTML =
-    `<table class="users-tbl"><thead><tr><th>משתמש</th><th>אימייל</th><th>סטטוס</th><th>פעולות</th></tr></thead>` +
+    `<table class="users-tbl"><thead><tr><th>משתמש</th><th>אימייל</th><th>תאריך רישום</th><th>הודעות</th><th>סטטוס</th><th>פעולות</th></tr></thead>` +
     `<tbody>${rows}</tbody></table>`;
   $("usersList").querySelectorAll(".usr-role").forEach(sel => sel.onchange = () => changeRole(sel.dataset.id, sel.value));
   $("usersList").querySelectorAll("[data-block]").forEach(el => el.onclick = () => toggleBlock(el.dataset.block, el.dataset.blocked === "0"));
