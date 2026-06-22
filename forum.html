@@ -1935,16 +1935,21 @@ function renderMention(ta){
     `<span class="avatar">${esc((u.display_name||"?").slice(0,1))}</span>@${esc(u.display_name)}</div>`
   ).join("");
   pop.classList.remove("hidden");                        // reveal FIRST so we can measure it
-  // Position with the same proven logic as the who-liked popover: align the popup's right
-  // edge to the box (RTL), clamp inside the viewport, and flip above if it would overflow.
+  // Align the popup's right edge to the box (RTL) and clamp inside the viewport.
+  const margin = 8, gap = 4;
   const r = ta.getBoundingClientRect();
   let left = r.right - pop.offsetWidth;
-  left = Math.max(8, Math.min(left, window.innerWidth - 8 - pop.offsetWidth));
-  let top = r.bottom + 4;
-  if (top + pop.offsetHeight > window.innerHeight - 8) top = r.top - 4 - pop.offsetHeight;
+  left = Math.max(margin, Math.min(left, window.innerWidth - margin - pop.offsetWidth));
   pop.style.left = left + "px";
   pop.style.right = "auto";
-  pop.style.top = Math.max(8, top) + "px";
+  // Open UPWARD when there isn't room below and there's more room above (typing near the
+  // bottom of the screen). Cap the height to the chosen side so the list always fits.
+  const spaceBelow = window.innerHeight - r.bottom - margin;
+  const spaceAbove = r.top - margin;
+  const up = spaceBelow < pop.offsetHeight && spaceAbove > spaceBelow;
+  pop.style.maxHeight = Math.max(120, (up ? spaceAbove : spaceBelow) - gap) + "px";
+  const top = up ? (r.top - gap - pop.offsetHeight) : (r.bottom + gap);
+  pop.style.top = Math.max(margin, top) + "px";
   pop.querySelectorAll(".mention-item").forEach(el =>
     el.onmousedown = (e) => { e.preventDefault(); pickMention(parseInt(el.dataset.i,10)); });
 }
