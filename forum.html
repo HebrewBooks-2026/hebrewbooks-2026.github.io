@@ -554,7 +554,7 @@
   <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
     <h2>התראות</h2>
     <div id="notifList" class="modal-body"></div>
-    <div class="modal-actions"><button id="notifClose" class="btn btn-light" type="button">סגור</button></div>
+    <div class="modal-actions"><button id="notifReadAll" class="btn btn-light" type="button">סמן הכל כנקרא</button><button id="notifClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
 
@@ -1663,8 +1663,13 @@ function renderNotifList(items){
     : `<div class="empty" style="padding:16px">אין התראות חדשות.</div>`;
   if (read.length) html += `<div class="notif-sec notif-sec-old">ישנות</div>` + read.map(row).join("");
   box.innerHTML = html;
-  box.querySelectorAll(".notif").forEach(el => el.onclick = () => {
+  box.querySelectorAll(".notif").forEach(el => el.onclick = async () => {
     const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
+    // visiting a thread clears ONLY that thread's notifications (not every unread one)
+    if (tid){
+      try{ const r = await api("/notifications/read", { method:"POST", body:{ topic_id: parseInt(tid,10) } }); setBell(r.unread); }
+      catch{}
+    }
     closeNotifications();
     if (tid){
       const hash = "#topic=" + tid + (pid ? "&post=" + pid : "");
@@ -1679,8 +1684,7 @@ async function openNotifications(){
   try{
     const r = await api("/notifications");
     renderNotifList(r.notifications);
-    if (r.unread) await api("/notifications/read", { method:"POST" });  // viewing = read
-    setBell(0);
+    setBell(r.unread);   // opening the panel does NOT clear anything; the badge stays truthful
   } catch(e){ $("notifList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 function closeNotifications(){ $("notifOverlay").classList.add("hidden"); }
@@ -2125,6 +2129,10 @@ $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBod
 // notifications bell
 $("bellBtn").onclick = openNotifications;
 $("notifClose").onclick = closeNotifications;
+$("notifReadAll").onclick = async () => {
+  try{ const r = await api("/notifications/read", { method:"POST" }); setBell(r.unread); }catch{}
+  try{ const r = await api("/notifications"); renderNotifList(r.notifications); }catch{}
+};
 $("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
 // ---- auto-refresh: keep the list / open topic live without a manual reload --------
 async function refreshOpenTopicPosts(){
