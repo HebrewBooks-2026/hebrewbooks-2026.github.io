@@ -1212,9 +1212,7 @@ async function loadCategories(pre){
   ).join("");
   box.querySelectorAll(".cat").forEach(el => el.onclick = () => {
     const v = el.getAttribute("data-cat");
-    activeCat = v ? parseInt(v,10) : null;
-    topicPage = 1;                              // new filter → back to page 1
-    loadCategories(); loadTopics();
+    goCat(v ? parseInt(v,10) : null);          // pushes #cat=<id> (deep-linkable) + filters
   });
   box.querySelectorAll(".cat-act").forEach(btn => btn.onclick = (e) => {
     e.stopPropagation();                       // don't also select the category
@@ -1993,13 +1991,43 @@ function showList(){
   curTopicId = null;
   loadTopics();
 }
+// Apply a category filter and render the list. Resets search + paging. Touching the URL
+// is the caller's job (goCat pushes #cat=…; routeFromHash already moved through history).
+function applyCat(id){
+  activeCat = id || null;
+  searchQuery = "";
+  if ($("topicSearch")) $("topicSearch").value = "";
+  topicPage = 1;
+  show("viewList");
+  curTopicId = null;
+  loadCategories(); loadTopics();
+}
+// User picked a category in the sidebar → push a shareable "#cat=<id>" route (clean URL
+// for "all"), so a filtered view is deep-linkable (e.g. a link straight to שו"ת / מדריכים).
+function goCat(id){
+  const h = id ? "#cat=" + id : "";
+  if ((location.hash || "") !== h){
+    if (h) history.pushState(null, "", h);
+    else history.pushState(null, "", location.pathname + location.search);
+  }
+  applyCat(id);
+}
 function goTopic(id){
   if (location.hash !== "#topic=" + id) history.pushState(null, "", "#topic=" + id);
   openTopic(id);
 }
+// "Back" from a topic returns to the list, preserving the active category and reflecting
+// it in the URL (#cat=<id>, or clean for "all").
 function goList(){
-  if (location.hash) history.pushState(null, "", location.pathname + location.search);
+  const h = activeCat ? "#cat=" + activeCat : "";
+  if ((location.hash || "") !== h) history.pushState(null, "", h || (location.pathname + location.search));
   showList();
+}
+// Clicking the "הפורום" brand = full reset to the home view: no category, no search,
+// page 1, and a clean URL.
+function goHome(){
+  if (location.hash) history.pushState(null, "", location.pathname + location.search);
+  applyCat(null);
 }
 // Direct link to a topic. #topic=<id> is read on load and on hashchange (Back/Forward).
 function topicUrl(id){ return location.origin + location.pathname + "#topic=" + id; }
@@ -2048,9 +2076,13 @@ function routeFromHash(){
     if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
     else if (pid && !document.getElementById("post-" + pid)) openTopic(id);  // anchor on another page → reload
     else scrollToHashPost();   // already on this topic, post is on-screen — just jump to it
-  } else if (!$("viewTopic").classList.contains("hidden")){
-    showList();
+    return;
   }
+  // list route: "#cat=<id>" filters by a category; anything else (incl. empty) = all.
+  const mc = location.hash.match(/^#cat=(\d+)/);
+  const wantCat = mc ? parseInt(mc[1], 10) : null;
+  const onList = !$("viewList").classList.contains("hidden");
+  if (!onList || wantCat !== activeCat) applyCat(wantCat);
 }
 
 // ====== init ======
@@ -2082,7 +2114,7 @@ $("usrStatusFilter").onchange = renderUsers;
 $("usrRoleFilter").onchange = renderUsers;
 
 // clicking the forum title returns to the forum home (the topics list), not a reload
-document.querySelector(".brand").onclick = (e) => { e.preventDefault(); goList(); };
+document.querySelector(".brand").onclick = (e) => { e.preventDefault(); goHome(); };
 
 // deep-link: react to back/forward and pasted #topic=… links
 window.addEventListener("hashchange", routeFromHash);
