@@ -203,6 +203,13 @@
   .like-pop-h{font-size:.7rem;font-weight:800;color:var(--muted);letter-spacing:.04em;padding:4px 7px 8px}
   .like-pop-row{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;font-weight:600;font-size:.93rem}
   .like-pop-row:hover{background:var(--parch)}
+  /* @mention autocomplete dropdown (anchored under the compose box) */
+  .mention-pop{position:fixed;z-index:70;background:#fff;border:1px solid var(--line);border-radius:11px;
+    box-shadow:0 12px 34px rgba(34,41,58,.18);padding:5px;min-width:190px;max-width:300px;max-height:240px;overflow:auto}
+  .mention-pop.hidden{display:none}
+  .mention-item{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;cursor:pointer;
+    font-weight:600;font-size:.93rem;white-space:nowrap}
+  .mention-item.on,.mention-item:hover{background:var(--parch)}
   .avatar{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:50%;flex:0 0 auto;
     background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;font-weight:800;font-size:.86rem}
   /* accepted-answer: green badge + post highlight; the "mark" button goes green when on */
@@ -560,6 +567,9 @@
 
 <!-- "who liked" hover popover (positioned in JS; position:fixed) -->
 <div id="likePop" class="like-pop hidden"></div>
+
+<!-- @mention autocomplete dropdown (positioned in JS under the active compose box) -->
+<div id="mentionPop" class="mention-pop hidden"></div>
 
 <!-- edit a post (textarea + image button, mirrors the compose forms) -->
 <div id="editOverlay" class="modal-overlay hidden">
@@ -1789,6 +1799,7 @@ function makeToolbar(ta){
   ta.parentNode.insertBefore(tb, ta);
   setMode(ta, "text");
   enableImagePaste(ta);   // paste an image from the clipboard straight into this box
+  enableMention(ta);      // "@" opens the member autocomplete
 }
 // The body we send: HTML-mode posts get the marker prefix so the renderer sanitizes them.
 function composeBody(ta){
@@ -1859,6 +1870,71 @@ function enableImagePaste(ta){
     }
   });
 }
+// ---- @mention autocomplete -------------------------------------------------
+// Typing "@" (at line-start or after whitespace) opens a dropdown of members whose
+// nickname matches what follows, up to the next space. Picking one inserts the FULL
+// "@Nickname " into the box — which is exactly what the server's resolveMentions matches
+// (whole display name, so multi-word nicknames work and fire a 'mention' notification).
+let mentionState = null;       // {ta, atPos, caret} while the popup is open
+let mentionItems = [];         // current suggestions
+let mentionIdx = 0;            // highlighted row
+let mentionTimer = null;
+function enableMention(ta){
+  ta.addEventListener("input", () => updateMention(ta));
+  ta.addEventListener("keydown", (e) => mentionKeydown(e, ta));
+  ta.addEventListener("blur", () => setTimeout(hideMention, 150));  // let a click land first
+}
+function updateMention(ta){
+  const caret = ta.selectionStart;
+  // "@" must start the line or follow whitespace (so emails/URLs don't trigger), then a
+  // run of non-space chars right up to the caret = the query.
+  const mm = ta.value.slice(0, caret).match(/(?:^|\s)@(\S*)$/);
+  if (!mm){ hideMention(); return; }
+  const q = mm[1];
+  mentionState = { ta, atPos: caret - q.length - 1, caret };
+  clearTimeout(mentionTimer);
+  mentionTimer = setTimeout(async () => {
+    try{
+      const r = await api("/members?q=" + encodeURIComponent(q));
+      mentionItems = r.members || [];
+      mentionIdx = 0;
+      renderMention(ta);
+    } catch{ hideMention(); }
+  }, 120);
+}
+function renderMention(ta){
+  const pop = $("mentionPop");
+  if (!mentionItems.length || !mentionState){ hideMention(); return; }
+  pop.innerHTML = mentionItems.map((u,i) =>
+    `<div class="mention-item ${i===mentionIdx?'on':''}" data-i="${i}">` +
+    `<span class="avatar">${esc((u.display_name||"?").slice(0,1))}</span>@${esc(u.display_name)}</div>`
+  ).join("");
+  const r = ta.getBoundingClientRect();
+  pop.style.top = (r.bottom + 4) + "px";                 // just below the box (position:fixed)
+  pop.style.right = (document.documentElement.clientWidth - r.right) + "px";  // RTL: align right edges
+  pop.style.left = "auto";
+  pop.classList.remove("hidden");
+  pop.querySelectorAll(".mention-item").forEach(el =>
+    el.onmousedown = (e) => { e.preventDefault(); pickMention(parseInt(el.dataset.i,10)); });
+}
+function mentionKeydown(e, ta){
+  if ($("mentionPop").classList.contains("hidden") || !mentionItems.length) return;
+  if (e.key === "ArrowDown"){ e.preventDefault(); mentionIdx = (mentionIdx+1)%mentionItems.length; renderMention(ta); }
+  else if (e.key === "ArrowUp"){ e.preventDefault(); mentionIdx = (mentionIdx-1+mentionItems.length)%mentionItems.length; renderMention(ta); }
+  else if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); pickMention(mentionIdx); }
+  else if (e.key === "Escape"){ e.preventDefault(); hideMention(); }
+}
+function pickMention(i){
+  if (!mentionState || !mentionItems[i]) return;
+  const { ta, atPos, caret } = mentionState;
+  const insert = "@" + mentionItems[i].display_name + " ";
+  ta.value = ta.value.slice(0, atPos) + insert + ta.value.slice(caret);
+  const pos = atPos + insert.length;
+  ta.focus(); ta.selectionStart = ta.selectionEnd = pos;
+  hideMention();
+}
+function hideMention(){ $("mentionPop").classList.add("hidden"); mentionItems = []; mentionState = null; }
+
 async function deletePost(id){
   if (!await confirmDialog("מחיקת הודעה", "למחוק את ההודעה?", "מחק")) return;
   try{ await api(`/posts/${id}`, { method:"DELETE" }); openTopic(curTopicId); }
