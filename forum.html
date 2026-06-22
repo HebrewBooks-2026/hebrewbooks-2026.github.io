@@ -1457,7 +1457,8 @@ async function openTopic(id, opts){
   if (atLeast("admin"))
     modHtml += `<button class="btn btn-light btn-sm" id="pinBtn">${t.is_pinned?"בטל נעיצה":"📌 נעץ"}</button>`;
   if (atLeast("moderator"))
-    modHtml += `<button class="btn btn-light btn-sm" id="lockBtn">${t.is_locked?"בטל נעילה":"נעל"}</button>` +
+    modHtml += `<button class="btn btn-light btn-sm" id="moveCatBtn">📂 העבר קטגוריה</button>` +
+               `<button class="btn btn-light btn-sm" id="lockBtn">${t.is_locked?"בטל נעילה":"נעל"}</button>` +
                `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
   mod.innerHTML = modHtml;
   $("shareBtn").onclick = () => shareTopic(id);
@@ -1465,6 +1466,7 @@ async function openTopic(id, opts){
   if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
   if (atLeast("admin")) $("pinBtn").onclick = () => modPin(id, !t.is_pinned);
   if (atLeast("moderator")){
+    $("moveCatBtn").onclick = () => moveCategory(id, t.category_id);
     $("lockBtn").onclick = () => modLock(id, !t.is_locked);
     $("delTopicBtn").onclick = () => modDeleteTopic(id);
   }
@@ -2103,6 +2105,29 @@ async function modLock(id, locked){
 async function modPin(id, pinned){
   try{ await api(`/topics/${id}/pin`, { method:"PATCH", body:{ pinned }}); flash(pinned?"הנושא ננעץ למעלה.":"הנעיצה בוטלה.","ok"); openTopic(id); }
   catch(e){ flash(e.message, "err"); }
+}
+// Move a topic to another category (moderator+). Picker mirrors the new-topic category
+// tree (parents + "↳" children), pre-selected to the topic's current category.
+async function moveCategory(id, currentCatId){
+  const tops = cats.filter(c => !c.parent_id);
+  const kidsOf = (pid) => cats.filter(c => c.parent_id === pid);
+  const sel = (cid) => cid === currentCatId ? " selected" : "";
+  const optionsHtml = tops.map(p =>
+    `<option value="${p.id}"${sel(p.id)}>${esc(p.name)}</option>` +
+    kidsOf(p.id).map(k => `<option value="${k.id}"${sel(k.id)}>&nbsp;&nbsp;↳ ${esc(k.name)}</option>`).join("")
+  ).join("");
+  const r = await openModal({ title:"העברת נושא לקטגוריה",
+    bodyHTML:`<select class="in" data-field="category_id">${optionsHtml}</select>`,
+    okText:"העבר" });
+  if (!r) return;
+  const catId = parseInt(r.category_id, 10);
+  if (!catId || catId === currentCatId) return;
+  try{
+    await api(`/topics/${id}/move`, { method:"PATCH", body:{ category_id: catId }});
+    flash("הנושא הועבר לקטגוריה.", "ok");
+    await loadCategories();      // refresh sidebar counts
+    openTopic(id);
+  } catch(e){ flash(e.message, "err"); }
 }
 async function editTitle(id, current){
   const r = await openModal({ title:"עריכת כותרת הנושא",
