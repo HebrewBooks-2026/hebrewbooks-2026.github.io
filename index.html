@@ -60,6 +60,13 @@
   .nav-links{display:flex;gap:26px;font-weight:500;opacity:.9}
   .nav-links a:hover{color:var(--amber)}
   @media(max-width:680px){.nav-links{display:none}}
+  /* sticky top bar: the menu stays pinned at the top while the page scrolls */
+  .topbar{position:sticky;top:0;z-index:100;color:#f3eede;
+    background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 100%);
+    padding:12px 0;box-shadow:0 6px 22px rgba(21,35,63,.28)}
+  .topbar .nav{padding:0}
+  .topbar .brand{cursor:pointer}
+  .topbar .logo{width:38px;height:38px;font-size:1.3rem;box-shadow:0 6px 16px rgba(202,162,74,.4)}
 
   .hero-grid{position:relative;z-index:2;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;margin-top:64px}
   @media(max-width:880px){.hero-grid{grid-template-columns:1fr;text-align:center;margin-top:44px}}
@@ -300,10 +307,10 @@
   להזמנת כונן<br>עם כל המאגר<br>לחץ כאן
 </a>
 
-<header class="hero">
+<header class="topbar">
   <div class="wrap">
     <nav class="nav">
-      <div class="brand"><span class="logo serif">ס</span> HebrewBooks</div>
+      <a href="index.html" class="brand" id="brandHome"><span class="logo serif">ס</span> HebrewBooks</a>
       <div class="nav-links">
         <a href="#features">תכונות</a>
         <a href="#download">הורדה</a>
@@ -313,6 +320,11 @@
         <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases" target="_blank" rel="noopener">גרסאות</a>
       </div>
     </nav>
+  </div>
+</header>
+
+<header class="hero">
+  <div class="wrap">
 
     <div class="hero-grid">
       <div class="hero-text">
@@ -522,6 +534,16 @@
 </footer>
 
 <script>
+  // Clicking the logo + "HebrewBooks" title refreshes the page (drops any #hash and reloads).
+  (function(){
+    var brand = document.getElementById('brandHome');
+    if (brand) brand.addEventListener('click', function(e){
+      e.preventDefault();
+      history.replaceState(null, '', location.pathname);
+      location.reload();
+    });
+  })();
+
   // Keep the version badge live: read the latest release tag from GitHub (graceful fallback
   // to the static value baked above if offline / rate-limited). Same call also looks for
   // the latest PRE-RELEASE in the list and, if found, populates + reveals the beta section.
