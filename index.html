@@ -534,16 +534,14 @@
 </footer>
 
 <script>
-  // Clicking the logo + "HebrewBooks" title refreshes the page (drops any #hash and reloads).
+  // Clicking the logo + "HebrewBooks" title jumps back to the top of the page
+  // (drops any #hash; no reload).
   (function(){
     var brand = document.getElementById('brandHome');
     if (brand) brand.addEventListener('click', function(e){
       e.preventDefault();
-      // don't let the browser restore the old scroll position after the reload
-      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-      history.replaceState(null, '', location.pathname);   // drop any #hash
-      window.scrollTo(0, 0);                                 // start at the very top
-      location.reload();
+      history.replaceState(null, '', location.pathname);    // drop any #hash
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   })();
 
