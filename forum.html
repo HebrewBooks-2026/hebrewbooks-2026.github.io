@@ -205,6 +205,8 @@
     font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9rem}
   .post-body .mention{color:var(--indigo);font-weight:700;background:var(--parch2);
     border-radius:5px;padding:0 4px;white-space:nowrap}
+  .post-body .quote{display:block;margin:.5em 0;padding:.5em .9em;border-inline-start:3px solid var(--gold);
+    background:var(--parch);border-radius:0 8px 8px 0;color:var(--ink);opacity:.92;white-space:normal}
   .post-body code,.code-inline{direction:ltr;unicode-bidi:embed;background:var(--parch2);color:#9a3b2f;
     padding:1px 6px;border-radius:6px;font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9em}
   .post-body pre code{background:none;color:inherit;padding:0}
@@ -792,6 +794,13 @@ function renderBody(text){
     const re = new RegExp("(^|\\s)@(" + alt + ")(?![\\p{L}\\p{N}])", "gu");
     h = h.replace(re, (_, pre, name) => pre + '<span class="mention">@' + name + '</span>');
   }
+  // 0.6) blockquotes: a run of lines starting with "> " collapses into one styled
+  //    <blockquote> (used by the quote-reply button). Stashed like code so its inner
+  //    newlines survive and it isn't re-processed by the steps below.
+  h = h.replace(/(^|\n)((?:&gt;[^\n]*(?:\n|$))+)/g, (_, pre, block) => {
+    const inner = block.replace(/^&gt; ?/gm, "").replace(/\n+$/, "").replace(/\n/g, "<br>");
+    return pre + "\x00C" + (codeStore.push(`<blockquote class="quote">${inner}</blockquote>`) - 1) + "\x00";
+  });
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
@@ -1602,8 +1611,10 @@ function postHtml(o, byId){
   actions += `<button class="btn btn-light btn-sm like-btn ${p.liked_by_me?'liked':''}" data-act="like" data-id="${p.id}">👍</button>`;
   if (p.like_count > 0)
     actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
-  if (canReply)
+  if (canReply){
     actions += `<button class="btn btn-light btn-sm" data-act="reply" data-id="${p.id}">↩ השב</button>`;
+    actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}">❝ ציטוט</button>`;
+  }
   if (mine || atLeast("moderator")){
     actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
     actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
@@ -1651,6 +1662,7 @@ function wirePostActions(){
     if (act === "link")  return sharePost(id);
     if (act === "like")  return toggleLike(id);
     if (act === "reply") return setReplyTo(id);
+    if (act === "quote") return quotePost(id);
     if (act === "gotopost") return jumpToPost(id);
     if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
@@ -1717,6 +1729,34 @@ function clearReplyTo(){
   replyTo = null;
   const c = $("replyCtx");
   if (c){ c.classList.add("hidden"); c.innerHTML = ""; }
+}
+// "Quote" a post: thread the reply under it AND prepend a "> "-quoted block of its text
+// to the reply box. renderBody turns consecutive "> " lines into a styled <blockquote>.
+function quotePost(id){
+  const p = curPosts.find(x => x.id === id);
+  if (!p) return;
+  setReplyTo(id);                       // permission check + thread link + scroll/focus
+  if (replyTo !== id) return;           // setReplyTo bailed (not allowed) — don't insert
+  // reduce the quoted post to plain text (drop images/code/markup), capped in length
+  let body = String(p.body || "");
+  if (body.startsWith(HTML_MARK)) body = body.slice(HTML_MARK.length).replace(/^\n/, "");
+  body = body
+    .replace(/```[\s\S]*?```/g, " [קוד] ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " [תמונה] ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (body.length > 500) body = body.slice(0, 500) + "…";
+  const quoted = (p.author + " כתב/ה:\n" + body)
+    .split("\n").map(l => "> " + l).join("\n");
+  const ta = $("replyBody");
+  setMode(ta, "text");
+  ta.value = quoted + "\n\n" + ta.value;
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ta.value.length;   // caret after the quote
 }
 // Styled popover listing who liked a post — instant (names come embedded as
 // p.liker_names, '||'-joined). position:fixed, clamped to the viewport, flips above
