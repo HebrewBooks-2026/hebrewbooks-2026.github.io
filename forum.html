@@ -127,6 +127,23 @@
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
   .act-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  /* clickable author name → profile */
+  .user-link{cursor:pointer}
+  .user-link:hover{text-decoration:underline;text-underline-offset:2px}
+  /* profile modal */
+  .prof-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .prof-avatar{width:52px;height:52px;font-size:1.5rem}
+  .prof-name{font-weight:800;font-size:1.25rem;display:flex;align-items:center;gap:8px}
+  .prof-meta{color:var(--muted);font-size:.9rem;margin-top:3px}
+  .prof-sec{font-size:.74rem;font-weight:800;color:var(--muted);letter-spacing:.04em;
+    margin:14px 0 6px;text-transform:uppercase}
+  .prof-post{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:background .12s}
+  .prof-post:hover{background:var(--parch)}
+  .prof-post-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .prof-topic{font-weight:700;color:var(--indigo)}
+  .prof-when{color:var(--muted);font-size:.78rem;white-space:nowrap}
+  .prof-snippet{color:var(--ink);font-size:.9rem;margin-top:3px;opacity:.85;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* site-wide activity feed rows */
   .activity-row{padding:13px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s}
   .activity-row:last-child{border-bottom:0}
@@ -594,6 +611,14 @@
 
 <!-- @mention autocomplete dropdown (positioned in JS under the active compose box) -->
 <div id="mentionPop" class="mention-pop hidden"></div>
+
+<!-- user profile (opened by clicking an author's name) -->
+<div id="profileOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px">
+    <div id="profileBody" class="modal-body"></div>
+    <div class="modal-actions"><button id="profileClose" class="btn btn-light" type="button">סגור</button></div>
+  </div>
+</div>
 
 <!-- edit a post (textarea + image button, mirrors the compose forms) -->
 <div id="editOverlay" class="modal-overlay hidden">
@@ -1394,7 +1419,7 @@ async function loadActivity(){
   box.innerHTML = data.activity.map(a => {
     const verb = a.is_opening ? "פתח/ה נושא" : "הגיב/ה ב";
     return `<div class="activity-row" data-topic="${a.topic_id}" data-post="${a.id}">
-      <div class="act-line"><b>${esc(a.author)}</b> ${verb} <span class="act-topic">${esc(a.topic_title)}</span></div>
+      <div class="act-line"><b class="user-link" data-uid="${a.author_id}">${esc(a.author)}</b> ${verb} <span class="act-topic">${esc(a.topic_title)}</span></div>
       ${a.snippet?`<div class="act-snippet">${esc(a.snippet)}</div>`:""}
       <div class="act-when">${when(a.created_at)}</div>
     </div>`;
@@ -1405,6 +1430,8 @@ async function loadActivity(){
     history.pushState(null, "", "#topic=" + tid + (pid ? "&post=" + pid : ""));
     routeFromHash();
   });
+  box.querySelectorAll(".user-link").forEach(el =>
+    el.onclick = (e) => { e.stopPropagation(); openProfile(parseInt(el.dataset.uid,10)); });
 }
 function renderActivityPager(total, pageSize){
   const box = $("activityPager");
@@ -1604,7 +1631,7 @@ function postHtml(o, byId){
     ${replyCtx}
     <div class="post-head">
       ${toggle}
-      <span class="who">${esc(p.author)}</span>${roleTag}
+      <span class="who user-link" data-uid="${p.user_id}">${esc(p.author)}</span>${roleTag}
       ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
       <span class="when">${when(p.created_at)}${editedNote}</span>
       ${collapsedTag}
@@ -1630,6 +1657,8 @@ function wirePostActions(){
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
+  $("posts").querySelectorAll(".user-link").forEach(el =>
+    el.onclick = (e) => { e.stopPropagation(); openProfile(parseInt(el.dataset.uid,10)); });
   $("posts").querySelectorAll(".like-count").forEach(el => {
     el.onmouseenter = () => showLikePop(el);
     el.onmouseleave = hideLikePop;
@@ -1809,6 +1838,40 @@ async function openNotifications(){
   } catch(e){ $("notifList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 function closeNotifications(){ $("notifOverlay").classList.add("hidden"); }
+
+// ---- user profile (click an author's name) ---------------------------------
+async function openProfile(uid){
+  if (!uid) return;
+  $("profileOverlay").classList.remove("hidden");
+  $("profileBody").innerHTML = `<div class="empty">טוען…</div>`;
+  try{
+    const p = (await api(`/users/${uid}/profile`)).profile;
+    const roleTag = p.role && p.role !== "member"
+      ? `<span class="role-tag role-${p.role}">${ROLE_LABEL[p.role]||p.role}</span>` : "";
+    const recent = p.recent.length
+      ? p.recent.map(x => `<div class="prof-post" data-topic="${x.topic_id}" data-post="${x.id}">
+          <div class="prof-post-top"><span class="prof-topic">${esc(x.topic_title)}</span><span class="prof-when">${when(x.created_at)}</span></div>
+          ${x.snippet?`<div class="prof-snippet">${esc(x.snippet)}</div>`:""}
+        </div>`).join("")
+      : `<div class="empty">אין עדיין הודעות.</div>`;
+    $("profileBody").innerHTML =
+      `<div class="prof-head">
+        <span class="avatar prof-avatar">${esc((p.display_name||"?").slice(0,1))}</span>
+        <div>
+          <div class="prof-name">${esc(p.display_name)} ${roleTag}</div>
+          <div class="prof-meta">הצטרף ${whenDate(p.created_at)} · ${p.post_count} הודעות · ${p.topic_count} נושאים</div>
+        </div>
+      </div>
+      <div class="prof-sec">הודעות אחרונות</div>${recent}`;
+    $("profileBody").querySelectorAll(".prof-post").forEach(el => el.onclick = () => {
+      const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
+      closeProfile();
+      history.pushState(null, "", "#topic=" + tid + (pid ? "&post=" + pid : ""));
+      routeFromHash();
+    });
+  } catch(e){ $("profileBody").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function closeProfile(){ $("profileOverlay").classList.add("hidden"); }
 
 // ====== writes ======
 async function submitNewTopic(){
@@ -2402,6 +2465,8 @@ $("editImgBtn").onclick = () => $("editImgInput").click();
 $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBody"));
 // notifications bell
 $("bellBtn").onclick = openNotifications;
+$("profileClose").onclick = closeProfile;
+$("profileOverlay").onclick = (e) => { if (e.target === $("profileOverlay")) closeProfile(); };
 $("notifClose").onclick = closeNotifications;
 $("notifReadAll").onclick = async () => {
   try{ const r = await api("/notifications/read", { method:"POST" }); setBell(r.unread); }catch{}
