@@ -351,10 +351,12 @@
   #viewList .panel-head{display:block;position:sticky;top:72px;z-index:30;
     background:var(--parch);padding-top:16px;padding-bottom:14px;margin-bottom:0;
     box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
-  /* topic view: pin the title + actions so only the posts scroll under them */
-  #viewTopic .panel-head{position:sticky;top:72px;z-index:30;
+  /* topic view: pin the back button + title + actions as one block; only posts scroll */
+  .topic-header{position:sticky;top:72px;z-index:30;
     background:var(--parch);padding-top:10px;padding-bottom:12px;margin-bottom:14px;
     box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
+  .topic-header .back{margin-bottom:8px}
+  .topic-header .panel-head{margin-bottom:0}
   .head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
   .topic-search{margin-top:12px;max-width:300px;padding:7px 12px;font-size:.86rem}
   .head-right{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
@@ -489,10 +491,12 @@
 
   <!-- ===== single topic view ===== -->
   <section id="viewTopic" class="hidden">
-    <span class="back" id="backFromTopic">→ חזרה לנושאים</span>
-    <div class="panel-head">
-      <h1 id="topicTitle"></h1>
-      <div id="topicMod" class="row-actions"></div>
+    <div class="topic-header">
+      <span class="back" id="backFromTopic">→ חזרה לנושאים</span>
+      <div class="panel-head">
+        <h1 id="topicTitle"></h1>
+        <div id="topicMod" class="row-actions"></div>
+      </div>
     </div>
     <div id="posts" class="card"></div>
     <div id="postsPager" class="pager hidden"></div>
