@@ -334,6 +334,9 @@
   .req-row:last-child{border-bottom:0}
   .req-meta{color:var(--muted);font-size:.86rem;margin-top:2px}
   .req-reason{color:var(--ink);margin:8px 0 10px;white-space:pre-wrap}
+  .rep-snippet{color:var(--ink);opacity:.85;font-size:.92rem;margin:6px 0 10px;padding:7px 10px;
+    background:var(--parch);border-radius:8px;border-inline-start:3px solid var(--line)}
+  .del-tag{color:var(--danger,#b4433a);font-size:.82rem;font-weight:700}
 
   /* list controls: title with the sort stacked UNDER it (right), button on the left.
      The whole header stays pinned (under the top bar) while the topics scroll. The
@@ -608,6 +611,15 @@
     <h2>בקשות הצטרפות</h2>
     <div id="reqList" class="modal-body"></div>
     <div class="modal-actions"><button id="reqClose" class="btn btn-light" type="button">סגור</button></div>
+  </div>
+</div>
+
+<!-- moderation queue (reported content) -->
+<div id="reportsOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:600px">
+    <h2>דיווחים לטיפול</h2>
+    <div id="reportsList" class="modal-body"></div>
+    <div class="modal-actions"><button id="reportsClose" class="btn btn-light" type="button">סגור</button></div>
   </div>
 </div>
 
@@ -919,14 +931,18 @@ function renderAuth(){
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
+    const staffBtns = atLeast("moderator")
+      ? ` <button class="btn btn-ghost btn-sm" id="reportsBtn">דיווחים<span id="repBadge" class="req-badge hidden">0</span></button>`
+      : "";
     const adminBtns = atLeast("admin")
       ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים<span id="usrCount" class="count-chip hidden">0</span></button>` +
         ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות<span id="reqBadge" class="req-badge hidden">0</span></button>`
       : "";
     slot.innerHTML =
-      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + adminBtns +
+      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + staffBtns + adminBtns +
       ` <button class="btn btn-ghost btn-sm" id="logoutBtn">יציאה</button>`;
     $("logoutBtn").onclick = logout;
+    if (atLeast("moderator")){ $("reportsBtn").onclick = openReports; refreshReportBadge(); }
     if (atLeast("admin")){ $("reqBtn").onclick = openRequests; $("usersBtn").onclick = openUsers; refreshReqBadge(); }
   } else {
     slot.innerHTML = `<button class="btn btn-gold btn-sm" id="loginBtn">התחברות</button>`;
@@ -1094,6 +1110,70 @@ async function refreshReqBadge(){
       uc.textContent = r.user_count;
       uc.classList.remove("hidden");
     }
+  } catch { badge.classList.add("hidden"); }
+}
+
+// ---- reports / moderation queue --------------------------------------------
+async function reportPost(id){
+  if (!me) return openAuth();
+  if (!canPost()){ flash("רק חברים מאושרים יכולים לדווח.", "err"); return; }
+  const r = await openModal({ title:"דיווח על תוכן",
+    bodyHTML:`<label class="fld">סיבת הדיווח (לא חובה)</label>` +
+             `<textarea class="in" data-field="reason" style="min-height:90px" placeholder="מה לא תקין בתוכן הזה?"></textarea>`,
+    okText:"שלח דיווח", danger:true });
+  if (r === null) return;
+  try{
+    await api(`/posts/${id}/report`, { method:"POST", body:{ reason:(r.reason||"").trim() }});
+    flash("הדיווח נשלח לצוות. תודה.", "ok");
+  } catch(e){ flash(e.message, "err"); }
+}
+async function openReports(){
+  $("reportsOverlay").classList.remove("hidden");
+  $("reportsList").innerHTML = `<div class="empty">טוען…</div>`;
+  try{ renderReports((await api("/reports")).reports); }
+  catch(e){ $("reportsList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function closeReports(){ $("reportsOverlay").classList.add("hidden"); }
+function renderReports(list){
+  if (!list.length){ $("reportsList").innerHTML = `<div class="empty">אין דיווחים פתוחים.</div>`; return; }
+  $("reportsList").innerHTML = list.map(r => `
+    <div class="req-row">
+      <div><b>${esc(r.reporter_name)}</b> דיווח/ה על הודעה של <b>${esc(r.author_name)}</b>${r.post_deleted?' <span class="del-tag">(נמחקה)</span>':''}</div>
+      <div class="req-meta">בנושא ״${esc(r.topic_title)}״ · ${when(r.created_at)}</div>
+      ${r.reason?`<div class="req-reason">סיבה: ${esc(r.reason)}</div>`:""}
+      <div class="rep-snippet">${esc(r.snippet||"")}</div>
+      <div class="post-actions">
+        <button class="btn btn-light btn-sm" data-goto="${r.topic_id}" data-post="${r.post_id}">עבור לפוסט</button>
+        ${r.post_deleted?'':`<button class="btn btn-danger btn-sm" data-del="${r.id}">מחק פוסט</button>`}
+        <button class="btn btn-gold btn-sm" data-resolve="${r.id}">סגור דיווח</button>
+      </div>
+    </div>`).join("");
+  $("reportsList").querySelectorAll("[data-goto]").forEach(el => el.onclick = () => {
+    closeReports();
+    history.pushState(null, "", "#topic=" + el.dataset.goto + "&post=" + el.dataset.post);
+    routeFromHash();
+  });
+  $("reportsList").querySelectorAll("[data-del]").forEach(el => el.onclick = () => resolveReport(el.dataset.del, true));
+  $("reportsList").querySelectorAll("[data-resolve]").forEach(el => el.onclick = () => resolveReport(el.dataset.resolve, false));
+}
+async function resolveReport(id, del){
+  if (del && !await confirmDialog("מחיקת פוסט", "למחוק את הפוסט המדווח ולסגור את הדיווח?", "מחק")) return;
+  try{
+    await api(`/reports/${id}/resolve`, { method:"POST", body:{ delete: !!del }});
+    flash(del ? "הפוסט נמחק והדיווח נסגר." : "הדיווח נסגר.", "ok");
+    renderReports((await api("/reports")).reports);
+    refreshReportBadge();
+    if (curTopicId) refreshOpenTopicPosts();   // reflect a deletion in the open topic
+  } catch(e){ flash(e.message, "err"); }
+}
+// Staff badge: open-report count on the "דיווחים" button (moderator+).
+async function refreshReportBadge(){
+  const badge = $("repBadge");
+  if (!badge || !atLeast("moderator")) return;
+  try{
+    const n = (await api("/reports")).open;
+    badge.textContent = n;
+    badge.classList.toggle("hidden", n === 0);
   } catch { badge.classList.add("hidden"); }
 }
 
@@ -1634,6 +1714,8 @@ function postHtml(o, byId){
     actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
   }
   actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
+  if (canPost() && !mine)
+    actions += `<button class="btn btn-light btn-sm" data-act="report" data-id="${p.id}" title="דווח על תוכן לא ראוי">🚩</button>`;
   if (canMarkSolution)
     actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
   let staff = "";
@@ -1677,6 +1759,7 @@ function wirePostActions(){
     if (act === "like")  return toggleLike(id);
     if (act === "reply") return setReplyTo(id);
     if (act === "quote") return quotePost(id);
+    if (act === "report") return reportPost(id);
     if (act === "gotopost") return jumpToPost(id);
     if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
@@ -2562,6 +2645,8 @@ $("joinOverlay").onclick = (e) => { if (e.target === $("joinOverlay")) closeJoin
 // admin requests modal
 $("reqClose").onclick = closeRequests;
 $("reqOverlay").onclick = (e) => { if (e.target === $("reqOverlay")) closeRequests(); };
+$("reportsClose").onclick = closeReports;
+$("reportsOverlay").onclick = (e) => { if (e.target === $("reportsOverlay")) closeReports(); };
 // admin users modal
 $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
@@ -2596,6 +2681,7 @@ async function refreshOpenTopicPosts(){
 async function autoRefresh(){
   refreshBell();
   refreshReqBadge();
+  refreshReportBadge();
   if (document.querySelector(".modal-overlay:not(.hidden)")) return;
   try{
     if (!$("viewList").classList.contains("hidden")){
