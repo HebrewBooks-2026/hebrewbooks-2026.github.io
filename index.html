@@ -539,7 +539,10 @@
     var brand = document.getElementById('brandHome');
     if (brand) brand.addEventListener('click', function(e){
       e.preventDefault();
-      history.replaceState(null, '', location.pathname);
+      // don't let the browser restore the old scroll position after the reload
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+      history.replaceState(null, '', location.pathname);   // drop any #hash
+      window.scrollTo(0, 0);                                 // start at the very top
       location.reload();
     });
   })();
