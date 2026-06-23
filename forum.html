@@ -136,7 +136,11 @@
   .prof-name{font-weight:800;font-size:1.25rem;display:flex;align-items:center;gap:8px}
   .prof-meta{color:var(--muted);font-size:.9rem;margin-top:3px}
   .prof-sec{font-size:.74rem;font-weight:800;color:var(--muted);letter-spacing:.04em;
-    margin:14px 0 6px;text-transform:uppercase}
+    margin:14px 0 6px;text-transform:uppercase;flex:0 0 auto}
+  /* profile: keep the header/stats fixed; ONLY the posts list scrolls */
+  #profileBody{display:flex;flex-direction:column;overflow:hidden}
+  #profileBody .prof-head{flex:0 0 auto}
+  .prof-posts{flex:1 1 auto;min-height:0;overflow-y:auto}
   .prof-post{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:background .12s}
   .prof-post:hover{background:var(--parch)}
   .prof-post-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
@@ -2038,7 +2042,8 @@ async function openProfile(uid){
           <div class="prof-meta">הצטרף ${whenDate(p.created_at)} · ${p.post_count} הודעות · ${p.topic_count} נושאים</div>
         </div>
       </div>
-      <div class="prof-sec">הודעות אחרונות</div>${recent}`;
+      <div class="prof-sec">הודעות אחרונות</div>
+      <div class="prof-posts">${recent}</div>`;
     $("profileBody").querySelectorAll(".prof-post").forEach(el => el.onclick = () => {
       const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
       closeProfile();
