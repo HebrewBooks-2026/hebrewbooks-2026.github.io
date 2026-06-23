@@ -154,6 +154,12 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  /* topic list filter pills */
+  .topic-filters{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+  .filter-pill{font-size:.85rem;font-weight:700;color:var(--muted);background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:5px 13px;cursor:pointer;transition:all .12s}
+  .filter-pill:hover{background:var(--parch)}
+  .filter-pill.on{background:var(--indigo);border-color:var(--indigo);color:#fff}
   /* numbered pager under the topic list */
   .pager{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin-top:14px}
   .pager.hidden{display:none}
@@ -446,12 +452,18 @@
                 <option value="new">החדש ביותר</option>
                 <option value="old">הישן ביותר</option>
                 <option value="alpha">לפי א־ב</option>
+                <option value="liked">הכי אהובים 👍</option>
               </select>
             </label>
           </div>
           <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
         </div>
         <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש נושאים…" autocomplete="off">
+        <div id="topicFilters" class="topic-filters">
+          <button class="filter-pill on" data-filter="">הכל</button>
+          <button class="filter-pill" data-filter="unanswered">ללא מענה</button>
+          <button class="filter-pill" data-filter="unsolved">לא נפתרו</button>
+        </div>
       </div>
       <div id="topics" class="card"></div>
       <div id="pager" class="pager hidden"></div>
@@ -681,7 +693,8 @@ let curPostPage = 1;      // current page of posts within the open topic (paged 
 let replyTo = null;       // post id this reply targets (null = top-level reply)
 let collapsed = new Set();// post ids whose subtree is collapsed in the thread view
 const POSTS_PER_PAGE = 30;// conversation ROOTS per page (their full subtrees ride along)
-let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha
+let sortMode = localStorage.getItem("forum_sort") || "new"; // new | old | alpha | liked
+let listFilter = "";      // ""(all) | unanswered | unsolved  (server-side topic filter)
 let allUsers = [];        // admin user-management cache (filtered client-side)
 let searchQuery = "";     // topic search term (matched server-side on title + posts)
 let searchTimer = null;   // debounce handle for the search box
@@ -1324,6 +1337,7 @@ async function loadTopics(pre){
     if (activeCat) p.set("category", activeCat);
     p.set("sort", sortMode);
     if (searchQuery) p.set("q", searchQuery);
+    if (listFilter) p.set("filter", listFilter);
     p.set("page", topicPage);
     data = await api("/topics?" + p.toString());
   }
@@ -2479,6 +2493,16 @@ $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 // topic sort selector (persisted)
 $("sortSel").value = sortMode;
 $("sortSel").onchange = () => { sortMode = $("sortSel").value; localStorage.setItem("forum_sort", sortMode); topicPage = 1; loadTopics(); };
+
+// topic filter pills (all / unanswered / unsolved) — single-select, server-side filter
+$("topicFilters").querySelectorAll(".filter-pill").forEach(b => b.onclick = () => {
+  const f = b.getAttribute("data-filter");
+  if (f === listFilter) return;
+  listFilter = f;
+  $("topicFilters").querySelectorAll(".filter-pill").forEach(x => x.classList.toggle("on", x === b));
+  topicPage = 1;
+  loadTopics();
+});
 
 // topic search (server-side; debounced so we don't hit the API on every keystroke)
 $("topicSearch").oninput = () => {
