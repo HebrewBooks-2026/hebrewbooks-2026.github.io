@@ -1514,7 +1514,7 @@ async function openTopic(id, opts){
   const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
-  if (canReply){ setMode($("replyBody"), "text"); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
+  if (canReply){ restoreReplyDraft(id); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
 
   show("viewTopic");
   if (opts.page) $("topicTitle").scrollIntoView({ behavior:"smooth", block:"start" });  // page change → top
@@ -1757,6 +1757,7 @@ function quotePost(id){
   ta.value = quoted + "\n\n" + ta.value;
   ta.focus();
   ta.selectionStart = ta.selectionEnd = ta.value.length;   // caret after the quote
+  saveReplyDraft();   // persist the quote immediately (a programmatic set fires no input event)
 }
 // Styled popover listing who liked a post — instant (names come embedded as
 // p.liker_names, '||'-joined). position:fixed, clamped to the viewport, flips above
@@ -1779,6 +1780,42 @@ function showLikePop(el){
   pop.style.top = Math.max(8, top) + "px";
 }
 function hideLikePop(){ $("likePop").classList.add("hidden"); }
+
+// ---- draft autosave (reply box per-topic + new-topic form) -----------------
+// Long posts shouldn't vanish on a stray navigation or a crash. We mirror the compose
+// boxes to localStorage as the user types, restore on open, and clear on a successful
+// send. Reply drafts are keyed per topic so each thread keeps its own.
+const DRAFT_REPLY = (tid) => "forum_draft_reply_" + tid;
+const DRAFT_NEW = "forum_draft_newtopic";
+let replyDraftTimer = null, newDraftTimer = null;
+function saveReplyDraft(){
+  if (!curTopicId) return;
+  const ta = $("replyBody"), v = ta.value;
+  if (v.trim()) localStorage.setItem(DRAFT_REPLY(curTopicId), JSON.stringify({ v, mode: ta.dataset.mode || "text" }));
+  else localStorage.removeItem(DRAFT_REPLY(curTopicId));
+}
+function restoreReplyDraft(tid){
+  const ta = $("replyBody");
+  let d = null; try{ d = JSON.parse(localStorage.getItem(DRAFT_REPLY(tid)) || "null"); }catch{}
+  if (d && d.v){ setMode(ta, d.mode || "text"); ta.value = d.v; flash("שוחזרה טיוטה.", "ok"); }
+  else { setMode(ta, "text"); ta.value = ""; }   // also clears any stale cross-topic text
+}
+function clearReplyDraft(tid){ localStorage.removeItem(DRAFT_REPLY(tid)); }
+function saveNewDraft(){
+  const t = $("newTitle").value, b = $("newBody").value;
+  if (t.trim() || b.trim())
+    localStorage.setItem(DRAFT_NEW, JSON.stringify({ t, b, c: $("newCat").value, mode: $("newBody").dataset.mode || "text" }));
+  else localStorage.removeItem(DRAFT_NEW);
+}
+function restoreNewDraft(){
+  let d = null; try{ d = JSON.parse(localStorage.getItem(DRAFT_NEW) || "null"); }catch{}
+  if (d && (d.t || d.b)){
+    $("newTitle").value = d.t || ""; setMode($("newBody"), d.mode || "text"); $("newBody").value = d.b || "";
+    if (d.c) $("newCat").value = d.c;
+    flash("שוחזרה טיוטה.", "ok");
+  } else { $("newTitle").value = ""; setMode($("newBody"), "text"); $("newBody").value = ""; }
+}
+function clearNewDraft(){ localStorage.removeItem(DRAFT_NEW); }
 
 // ---- interaction: likes + accepted-answer ----------------------------------
 async function toggleLike(postId){
@@ -1922,6 +1959,7 @@ async function submitNewTopic(){
       body: composeBody($("newBody")),
     }});
     $("newTitle").value = ""; $("newBody").value = ""; setMode($("newBody"), "text");
+    clearNewDraft();
     flash("הנושא פורסם.", "ok");
     await loadCategories(); await loadTopics();
     goTopic(r.topic_id);
@@ -1931,6 +1969,7 @@ async function submitReply(id){
   try{
     const r = await api(`/topics/${id}/posts`, { method:"POST", body:{ body:composeBody($("replyBody")), reply_to: replyTo }});
     $("replyBody").value = ""; setMode($("replyBody"), "text");
+    clearReplyDraft(id);
     clearReplyTo();
     // jump to the page holding the new reply (its conversation root) and scroll to it;
     // replaceState keeps the Back button clean.
@@ -2433,7 +2472,7 @@ $("backFromNew").onclick = () => show("viewList");
 $("backFromActivity").onclick = goList;
 $("activityBtn").onclick = goActivity;
 $("followAllBtn").onclick = toggleFollowAllPref;
-$("newTopicBtn").onclick = () => { setMode($("newBody"), "text"); show("viewNew"); };
+$("newTopicBtn").onclick = () => { show("viewNew"); restoreNewDraft(); };
 $("addCatBtn").onclick = () => addCategory();
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
@@ -2486,6 +2525,11 @@ $("editLinkBtn").onclick = () => insertLink($("editBody"));
 makeToolbar($("newBody"));
 makeToolbar($("replyBody"));
 makeToolbar($("editBody"));
+
+// draft autosave: mirror the compose boxes to localStorage as the user types (debounced)
+$("replyBody").addEventListener("input", () => { clearTimeout(replyDraftTimer); replyDraftTimer = setTimeout(saveReplyDraft, 400); });
+["newTitle","newBody"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(newDraftTimer); newDraftTimer = setTimeout(saveNewDraft, 400); }));
+$("newCat").addEventListener("change", saveNewDraft);
 
 // join-request modal
 $("jSubmit").onclick = submitJoin;
