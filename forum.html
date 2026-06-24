@@ -293,7 +293,12 @@
   .btn-danger-solid:hover{background:#a83d27}
 
   /* images inside posts */
-  .post-img{max-width:100%;max-height:520px;border-radius:11px;margin:8px 0;display:block;border:1px solid var(--line)}
+  .post-img{max-width:100%;max-height:520px;border-radius:11px;margin:8px 0;display:block;border:1px solid var(--line);cursor:zoom-in}
+  /* image lightbox */
+  .lightbox{position:fixed;inset:0;z-index:200;background:rgba(10,14,24,.9);
+    display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+  .lightbox.hidden{display:none}
+  .lightbox img{max-width:96vw;max-height:94vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
   /* links inside posts */
   .post-link{color:var(--indigo);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
   .post-link:hover{color:var(--gold)}
@@ -651,6 +656,9 @@
 
 <!-- @mention autocomplete dropdown (positioned in JS under the active compose box) -->
 <div id="mentionPop" class="mention-pop hidden"></div>
+
+<!-- image lightbox (click a post image to enlarge) -->
+<div id="lightbox" class="lightbox hidden"><img id="lightboxImg" alt=""></div>
 
 <!-- user profile (opened by clicking an author's name) -->
 <div id="profileOverlay" class="modal-overlay hidden">
@@ -2653,6 +2661,38 @@ $("replyBody").addEventListener("input", () => { clearTimeout(replyDraftTimer); 
 ["newTitle","newBody"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(newDraftTimer); newDraftTimer = setTimeout(saveNewDraft, 400); }));
 $("newCat").addEventListener("change", saveNewDraft);
 
+// Ctrl/⌘+Enter publishes from any compose box (unless the @mention popup is open — then
+// Enter belongs to it).
+function ctrlEnterSubmit(ta, fn){
+  ta.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter"){
+      if (!$("mentionPop").classList.contains("hidden")) return;   // mention popup owns Enter
+      e.preventDefault();
+      fn();
+    }
+  });
+}
+ctrlEnterSubmit($("replyBody"), () => { if (curTopicId) submitReply(curTopicId); });
+ctrlEnterSubmit($("newBody"),  submitNewTopic);
+ctrlEnterSubmit($("editBody"), saveEdit);
+
+// Image lightbox: click any post image to enlarge; click anywhere / Esc to close.
+(function(){
+  const lb = $("lightbox"), lbImg = $("lightboxImg");
+  document.addEventListener("click", (e) => {
+    const img = e.target.closest && e.target.closest("img.post-img");
+    if (img){ lbImg.src = img.src; lb.classList.remove("hidden"); }
+  });
+  lb.addEventListener("click", () => { lb.classList.add("hidden"); lbImg.src = ""; });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !lb.classList.contains("hidden")){ lb.classList.add("hidden"); lbImg.src = ""; }
+  });
+})();
+
+// Track recent scrolling so the 30s auto-refresh never re-renders mid-scroll (see autoRefresh).
+let lastScrollAt = 0;
+window.addEventListener("scroll", () => { lastScrollAt = Date.now(); }, { passive:true });
+
 // join-request modal
 $("jSubmit").onclick = submitJoin;
 $("jCancel").onclick = closeJoin;
@@ -2698,6 +2738,10 @@ async function autoRefresh(){
   refreshReqBadge();
   refreshReportBadge();
   if (document.querySelector(".modal-overlay:not(.hidden)")) return;
+  // Don't re-render content while the user is actively scrolling/reading — a DOM rebuild
+  // mid-scroll is jarring. The lightweight badges above already updated; the content
+  // refresh waits until ~8s after the last scroll.
+  if (Date.now() - lastScrollAt < 8000) return;
   try{
     if (!$("viewList").classList.contains("hidden")){
       if (document.activeElement === $("topicSearch")) return;   // user is typing a search
