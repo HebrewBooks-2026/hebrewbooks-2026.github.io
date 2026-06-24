@@ -1534,13 +1534,20 @@ async function toggleFollowAllPref(){
     flash(me.follow_all ? "מעכשיו תקבל התראה על כל פעילות חדשה באתר." : "ביטלת מעקב אחרי כל הפעילות.", "ok");
   } catch(e){ flash(e.message, "err"); }
 }
-async function loadActivity(){
+let activitySig = "";   // signature of what's on screen, so a silent refresh can no-op
+async function loadActivity(opts){
+  opts = opts || {};
   const box = $("activityList");
-  box.innerHTML = `<div class="empty">טוען…</div>`;
+  if (!opts.silent) box.innerHTML = `<div class="empty">טוען…</div>`;
   let data;
   try{ data = await api("/activity?page=" + activityPage); }
-  catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  if (!data.activity.length){ box.innerHTML = `<div class="empty">אין עדיין פעילות.</div>`; renderActivityPager(0, data.page_size||30); return; }
+  catch(e){ if (!opts.silent) box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!data.activity.length){ activitySig = ""; box.innerHTML = `<div class="empty">אין עדיין פעילות.</div>`; renderActivityPager(0, data.page_size||30); return; }
+  // A background (silent) refresh rebuilds the DOM only when something actually changed —
+  // otherwise it leaves the list (and the scroll position) untouched: no flash, no jump.
+  const sig = data.activity.map(a => a.id).join(",") + "|" + (data.total||0) + "|p" + activityPage;
+  if (opts.silent && sig === activitySig) return;
+  activitySig = sig;
   box.innerHTML = data.activity.map(a => {
     const verb = a.is_opening ? "פתח/ה נושא" : "הגיב/ה ב";
     return `<div class="activity-row" data-topic="${a.topic_id}" data-post="${a.id}">
@@ -2752,7 +2759,7 @@ async function autoRefresh(){
       if (document.activeElement === rb || (rb && rb.value.trim())) return;   // don't clobber a draft
       await refreshOpenTopicPosts();
     } else if (!$("viewActivity").classList.contains("hidden")){
-      await loadActivity();            // keep the activity feed live (same page)
+      await loadActivity({ silent:true });   // live feed, but no flash/jump unless something changed
     }
   } catch {}   // a transient fetch error must never break the timer
 }
