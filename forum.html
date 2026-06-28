@@ -331,6 +331,19 @@
   .post-body .rich pre{background:var(--parch2);padding:10px 12px;border-radius:8px;overflow:auto}
   .post-body .rich a{color:var(--indigo);font-weight:600;text-decoration:underline}
 
+  /* spoiler: a collapsed <details> the reader clicks to reveal (text mode emits
+     details.spoiler; HTML mode keeps the bare <details> — both selected here) */
+  .post-body details{margin:.6em 0;border:1px solid var(--line);border-radius:8px;
+    background:#faf7ef;overflow:hidden}
+  .post-body summary{cursor:pointer;padding:.5em .85em;font-weight:700;color:#7a5a14;
+    background:#f3ecda;user-select:none;list-style:none}
+  .post-body summary::-webkit-details-marker{display:none}
+  .post-body summary::before{content:"▶";display:inline-block;margin-inline-end:.5em;
+    font-size:.78em;transition:transform .15s}
+  .post-body details[open] summary::before{transform:rotate(90deg)}
+  .post-body .spoiler-body{padding:.6em .85em}
+  .post-body details > :not(summary):not(.spoiler-body){padding:.6em .85em}
+
   /* auth modal extras */
   .gbtn-full{width:100%;justify-content:center}
   .auth-divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.85rem;margin:16px 0}
@@ -766,7 +779,7 @@ function linkTag(href, label){ return `<a class="post-link" href="${href}" targe
 // innerHTML; the only innerHTML we read is of the tree WE built. So no <script>,
 // event handler (onerror=…), javascript: URL, or CSS url()/expression survives.
 const HTML_MARK = "<!--html-->";
-const SANITIZE_TAGS  = new Set("B STRONG I EM U S DEL MARK SMALL SUB SUP H2 H3 H4 P DIV BR HR BLOCKQUOTE UL OL LI CODE PRE SPAN A IMG".split(" "));
+const SANITIZE_TAGS  = new Set("B STRONG I EM U S DEL MARK SMALL SUB SUP H2 H3 H4 P DIV BR HR BLOCKQUOTE UL OL LI CODE PRE SPAN A IMG DETAILS SUMMARY".split(" "));
 const SANITIZE_ATTRS = { A: ["href"], IMG: ["src", "alt"] };
 const SANITIZE_STYLE = new Set(["color","background-color","text-align","font-weight","font-style","text-decoration"]);
 function safeStyle(s){
@@ -853,6 +866,12 @@ function renderBody(text){
     const inner = block.replace(/^&gt; ?/gm, "").replace(/\n+$/, "").replace(/\n/g, "<br>");
     return pre + "\x00C" + (codeStore.push(`<blockquote class="quote">${inner}</blockquote>`) - 1) + "\x00";
   });
+  // 0.7) spoiler: [spoiler]…[/spoiler] → a collapsed <details> the reader clicks to reveal
+  //    (NodeBB-style). Emitted as real tags BEFORE the image/link steps so the hidden text
+  //    still gets links/images/newlines; the wrapper tags themselves pass through untouched.
+  h = h.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, (_, inner) =>
+    `<details class="spoiler"><summary>🙈 ספוילר</summary><div class="spoiler-body">` +
+    inner.replace(/^\n+|\n+$/g, "") + `</div></details>`);
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
@@ -2144,6 +2163,7 @@ const HTML_FMT_BTNS = [
   { key: "list",      label: "• רשימה", title: "רשימה",    hint: "Ctrl+Shift+8",                                   wrap: ["<ul>\n<li>", "</li>\n</ul>"] },
   { key: "quote",     label: "❝ ציטוט", title: "ציטוט",    hint: "Ctrl+Shift+9",                                   wrap: ["<blockquote>", "</blockquote>"] },
   { key: "code",      label: "</> קוד", title: "בלוק קוד (LTR)", hint: "Ctrl+E", code: true },
+  { key: "spoiler",   label: "🙈 ספוילר", title: "ספוילר (תוכן מתקפל)", hint: "Ctrl+Shift+S", spoiler: true },
   { key: "color",     label: "🎨 צבע",  title: "צבע טקסט", color: true },
 ];
 // Toolbar buttons keyed for the keyboard-shortcut handler (formatShortcuts).
@@ -2172,6 +2192,13 @@ function applyFormat(ta, b){
     // escaping happens there, so code containing <, >, & stays intact.
     setMode(ta, "text");
     wrapSelection(ta, "```\n", "\n```");
+    return;
+  }
+  if (b.spoiler){
+    // spoiler also lives in TEXT mode: renderBody turns [spoiler]…[/spoiler] into a
+    // collapsed <details>. Keeps the user in plain text and the syntax stays editable.
+    setMode(ta, "text");
+    wrapSelection(ta, "[spoiler]\n", "\n[/spoiler]");
     return;
   }
   setMode(ta, "html");
@@ -2714,8 +2741,9 @@ function formatShortcuts(ta){
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     if (!$("mentionPop").classList.contains("hidden")) return;   // mention popup owns keys
     if (e.shiftKey){
-      // Ctrl+Shift+8 = list, Ctrl+Shift+9 = quote (Slack/Docs convention).
-      const k = e.code === "Digit8" ? "list" : e.code === "Digit9" ? "quote" : null;
+      // Ctrl+Shift+8 = list, Ctrl+Shift+9 = quote (Slack/Docs); Ctrl+Shift+S = spoiler.
+      const k = e.code === "Digit8" ? "list" : e.code === "Digit9" ? "quote"
+              : e.code === "KeyS" ? "spoiler" : null;
       if (k){ e.preventDefault(); applyFormat(ta, FMT_BY_KEY[k]); }
       return;
     }
