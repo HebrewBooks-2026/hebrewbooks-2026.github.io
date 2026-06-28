@@ -2224,6 +2224,13 @@ function makeToolbar(ta){
     btn.onclick = () => applyFormat(ta, b);
     tb.appendChild(btn);
   }
+  // Optional "paste" button for users who don't know Ctrl+V — hidden unless the
+  // clipboard has something to paste (see refreshPasteBtns / clipboardHasContent).
+  const pasteBtn = document.createElement("button");
+  pasteBtn.type = "button"; pasteBtn.className = "fmt-btn paste-btn hidden";
+  pasteBtn.title = "הדבקה מהלוח (תמונה או טקסט)"; pasteBtn.textContent = "📋 הדבק";
+  pasteBtn.onclick = () => pasteFromClipboard(ta);
+  tb.appendChild(pasteBtn);
   const tog = document.createElement("button");
   tog.type = "button"; tog.className = "mode-toggle";
   tog.title = "החלפה בין כתיבה רגילה לכתיבה עם תגיות HTML";
@@ -2234,6 +2241,7 @@ function makeToolbar(ta){
   setMode(ta, "text");
   enableImagePaste(ta);   // paste an image from the clipboard straight into this box
   enableMention(ta);      // "@" opens the member autocomplete
+  ta.addEventListener("focus", refreshPasteBtns);  // re-check the clipboard on entry
 }
 // The body we send: HTML-mode posts get the marker prefix so the renderer sanitizes them.
 function composeBody(ta){
@@ -2303,6 +2311,54 @@ function enableImagePaste(ta){
       }
     }
   });
+}
+// ---- "📋 הדבק" button: a Ctrl+V alternative for users who don't know the shortcut.
+// Reads the clipboard on click — an IMAGE is uploaded+embedded, otherwise TEXT is
+// inserted at the caret. The click itself is the user gesture that authorizes the read.
+async function pasteFromClipboard(ta){
+  ta.focus();
+  try{
+    if (navigator.clipboard && navigator.clipboard.read){
+      const items = await navigator.clipboard.read();
+      for (const it of items){
+        const imgType = (it.types || []).find((t) => t.startsWith("image/"));
+        if (imgType){
+          const blob = await it.getType(imgType);
+          await uploadImageFile(new File([blob], "pasted.png", { type: imgType }), ta);
+          return;
+        }
+      }
+    }
+  }catch{ /* read() unsupported/blocked — fall through to text */ }
+  try{
+    const text = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : "";
+    if (text){ insertAtCursor(ta, text); flash("הודבק מהלוח.", "ok"); return; }
+  }catch{ /* readText blocked */ }
+  flash("אין תוכן בלוח, או שהדפדפן חוסם גישה אליו — אפשר להדביק עם Ctrl+V.", "err");
+}
+// Best-effort peek WITHOUT prompting: true=has content, false=empty, null=can't tell.
+// We only read when clipboard-read is already granted; otherwise we return null and
+// leave the button visible so the feature stays reachable (the click reads with a gesture).
+async function clipboardHasContent(){
+  if (!navigator.clipboard) return null;
+  try{
+    const st = await navigator.permissions.query({ name: "clipboard-read" });
+    if (st.state !== "granted") return null;   // don't trigger a permission prompt to peek
+  }catch{ return null; }                        // permissions API can't query this (e.g. Firefox)
+  try{
+    if (navigator.clipboard.read){
+      const items = await navigator.clipboard.read();
+      if (items.some((it) => (it.types || []).some((t) => t.startsWith("image/")))) return true;
+    }
+    const text = navigator.clipboard.readText ? await navigator.clipboard.readText() : "";
+    return !!(text && text.trim());
+  }catch{ return null; }
+}
+// Show the paste button only when the clipboard has something (or when we can't tell).
+async function refreshPasteBtns(){
+  const has = await clipboardHasContent();
+  const show = has !== false;   // true OR null(unknown) -> show; only a definite empty hides it
+  document.querySelectorAll(".paste-btn").forEach((b) => b.classList.toggle("hidden", !show));
 }
 // ---- @mention autocomplete -------------------------------------------------
 // Typing "@" (at line-start or after whitespace) opens a dropdown of members whose
@@ -2719,6 +2775,8 @@ $("editLinkBtn").onclick = () => insertLink($("editBody"));
 makeToolbar($("newBody"));
 makeToolbar($("replyBody"));
 makeToolbar($("editBody"));
+// Re-check the clipboard when the user returns to the tab (e.g. after copying elsewhere).
+window.addEventListener("focus", refreshPasteBtns);
 
 // draft autosave: mirror the compose boxes to localStorage as the user types (debounced)
 $("replyBody").addEventListener("input", () => { clearTimeout(replyDraftTimer); replyDraftTimer = setTimeout(saveReplyDraft, 400); });
