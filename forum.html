@@ -2137,15 +2137,17 @@ function insertAtCursor(ta, text){
 // wrap the selection in safe tags and flip the surface to HTML mode; on submit,
 // composeBody() prefixes HTML_MARK so renderBody() sanitize-renders it.
 const HTML_FMT_BTNS = [
-  { label: "B",       title: "מודגש",     css: "font-weight:800",           wrap: ["<b>", "</b>"] },
-  { label: "I",       title: "נטוי",       css: "font-style:italic",         wrap: ["<i>", "</i>"] },
-  { label: "U",       title: "קו תחתון",   css: "text-decoration:underline", wrap: ["<u>", "</u>"] },
-  { label: "כותרת",   title: "כותרת",                                        wrap: ["<h3>", "</h3>"] },
-  { label: "• רשימה", title: "רשימה",                                        wrap: ["<ul>\n<li>", "</li>\n</ul>"] },
-  { label: "❝ ציטוט", title: "ציטוט",                                        wrap: ["<blockquote>", "</blockquote>"] },
-  { label: "</> קוד", title: "בלוק קוד (LTR)", code: true },
-  { label: "🎨 צבע",  title: "צבע טקסט",  color: true },
+  { key: "bold",      label: "B",       title: "מודגש",   hint: "Ctrl+B",       css: "font-weight:800",           wrap: ["<b>", "</b>"] },
+  { key: "italic",    label: "I",       title: "נטוי",     hint: "Ctrl+I",       css: "font-style:italic",         wrap: ["<i>", "</i>"] },
+  { key: "underline", label: "U",       title: "קו תחתון", hint: "Ctrl+U",       css: "text-decoration:underline", wrap: ["<u>", "</u>"] },
+  { key: "heading",   label: "כותרת",   title: "כותרת",                                                            wrap: ["<h3>", "</h3>"] },
+  { key: "list",      label: "• רשימה", title: "רשימה",    hint: "Ctrl+Shift+8",                                   wrap: ["<ul>\n<li>", "</li>\n</ul>"] },
+  { key: "quote",     label: "❝ ציטוט", title: "ציטוט",    hint: "Ctrl+Shift+9",                                   wrap: ["<blockquote>", "</blockquote>"] },
+  { key: "code",      label: "</> קוד", title: "בלוק קוד (LTR)", hint: "Ctrl+E", code: true },
+  { key: "color",     label: "🎨 צבע",  title: "צבע טקסט", color: true },
 ];
+// Toolbar buttons keyed for the keyboard-shortcut handler (formatShortcuts).
+const FMT_BY_KEY = Object.fromEntries(HTML_FMT_BTNS.map((b) => [b.key, b]));
 function wrapSelection(ta, before, after){
   ta.focus();
   const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
@@ -2187,7 +2189,7 @@ function makeToolbar(ta){
   tb.className = "editor-toolbar";
   for (const b of HTML_FMT_BTNS){
     const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "fmt-btn"; btn.title = b.title; btn.textContent = b.label;
+    btn.type = "button"; btn.className = "fmt-btn"; btn.title = b.hint ? `${b.title} (${b.hint})` : b.title; btn.textContent = b.label;
     if (b.css) btn.setAttribute("style", b.css);
     btn.onclick = () => applyFormat(ta, b);
     tb.appendChild(btn);
@@ -2702,6 +2704,30 @@ function ctrlEnterSubmit(ta, fn){
 ctrlEnterSubmit($("replyBody"), () => { if (curTopicId) submitReply(curTopicId); });
 ctrlEnterSubmit($("newBody"),  submitNewTopic);
 ctrlEnterSubmit($("editBody"), saveEdit);
+
+// Formatting shortcuts inside a compose box. Keyed on the PHYSICAL e.code (KeyB/KeyK/…),
+// NOT e.key — so they fire even when the keyboard is in Hebrew layout, where the B key
+// would otherwise type "נ". Each maps to the same action as its toolbar button.
+const FMT_KEYS = { KeyB: "bold", KeyI: "italic", KeyU: "underline", KeyE: "code" };
+function formatShortcuts(ta){
+  ta.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (!$("mentionPop").classList.contains("hidden")) return;   // mention popup owns keys
+    if (e.shiftKey){
+      // Ctrl+Shift+8 = list, Ctrl+Shift+9 = quote (Slack/Docs convention).
+      const k = e.code === "Digit8" ? "list" : e.code === "Digit9" ? "quote" : null;
+      if (k){ e.preventDefault(); applyFormat(ta, FMT_BY_KEY[k]); }
+      return;
+    }
+    if (e.code === "KeyK"){ e.preventDefault(); insertLink(ta); return; }   // link (modal)
+    const key = FMT_KEYS[e.code];
+    if (key){ e.preventDefault(); applyFormat(ta, FMT_BY_KEY[key]); }
+  });
+}
+formatShortcuts($("replyBody"));
+formatShortcuts($("newBody"));
+formatShortcuts($("editBody"));
+for (const id of ["replyLinkBtn", "newLinkBtn", "editLinkBtn"]) $(id).title = "הוספת קישור (Ctrl+K)";
 
 // Image lightbox: click any post image to enlarge; click anywhere / Esc to close.
 (function(){
