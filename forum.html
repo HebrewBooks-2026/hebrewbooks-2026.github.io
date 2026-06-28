@@ -126,6 +126,11 @@
   .topic-row:hover{background:#fbf8f0}
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
+  /* matched-content preview under a search result; click jumps to that message */
+  .topic-row .t-snip{color:var(--ink);font-size:.9rem;margin-top:4px;opacity:.9;cursor:pointer;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  .topic-row .t-snip:hover{text-decoration:underline;text-underline-offset:2px}
+  .topic-row .t-snip mark{background:#ffe9a8;color:inherit;padding:0 1px;border-radius:2px}
   .act-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   /* clickable author name → profile */
   .user-link{cursor:pointer}
@@ -478,7 +483,7 @@
           </div>
           <button id="newTopicBtn" class="btn btn-gold hidden">+ נושא חדש</button>
         </div>
-        <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש נושאים…" autocomplete="off">
+        <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש בפורום…" autocomplete="off">
         <div id="topicFilters" class="topic-filters">
           <button class="filter-pill on" data-filter="">הכל</button>
           <button class="filter-pill" data-filter="unanswered">ללא מענה</button>
@@ -1456,12 +1461,27 @@ async function loadTopics(pre){
     <div class="topic-row" data-id="${t.id}">
       <div>
         <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
+        ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
+  // A matched-content snippet jumps straight to that message (same deep-link the activity
+  // feed uses), not just to the topic's first page.
+  box.querySelectorAll(".t-snip").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const tid = el.closest(".topic-row").getAttribute("data-id");
+    const pid = el.getAttribute("data-post");
+    history.pushState(null, "", "#topic=" + tid + (pid ? "&post=" + pid : ""));
+    routeFromHash();
+  });
+}
+// Escape an FTS snippet, then turn the \x01/\x02 markers the server wrapped the match in
+// into <mark> highlight. Escaping first means the marks are the only HTML we emit.
+function markSnippet(s){
+  return esc(s).replace(//g, '<mark>').replace(//g, '</mark>');
 }
 
 // Which page numbers to show: always 1 + last + current±1, with "…" filling gaps.
