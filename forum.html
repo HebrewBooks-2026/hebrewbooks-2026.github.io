@@ -1978,7 +1978,10 @@ function restoreNewDraft(){
     $("newTitle").value = d.t || ""; setMode($("newBody"), d.mode || "text"); $("newBody").value = d.b || "";
     if (d.c) $("newCat").value = d.c;
     flash("שוחזרה טיוטה.", "ok");
-  } else { $("newTitle").value = ""; setMode($("newBody"), "text"); $("newBody").value = ""; }
+    return true;
+  }
+  $("newTitle").value = ""; setMode($("newBody"), "text"); $("newBody").value = "";
+  return false;
 }
 function clearNewDraft(){ localStorage.removeItem(DRAFT_NEW); }
 
@@ -2648,7 +2651,12 @@ $("backFromNew").onclick = () => show("viewList");
 $("backFromActivity").onclick = goList;
 $("activityBtn").onclick = goActivity;
 $("followAllBtn").onclick = toggleFollowAllPref;
-$("newTopicBtn").onclick = () => { show("viewNew"); restoreNewDraft(); };
+$("newTopicBtn").onclick = () => {
+  show("viewNew");
+  // Opening from inside a category should default the picker to THAT category
+  // (not the first/"כללי") — unless a saved draft already chose one.
+  if (!restoreNewDraft() && activeCat) $("newCat").value = activeCat;
+};
 $("addCatBtn").onclick = () => addCategory();
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
