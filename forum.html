@@ -57,6 +57,8 @@
     font-weight:700;font-size:.96rem;border-radius:11px;padding:10px 18px;
     transition:transform .12s ease,box-shadow .2s ease,background .2s ease}
   .btn:hover{transform:translateY(-1px)}
+  /* disabled (e.g. an image button while its upload is in progress) */
+  button:disabled,.btn:disabled,.fmt-btn:disabled{opacity:.55;cursor:progress;pointer-events:none;transform:none}
   .btn-gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#2b2208;box-shadow:0 8px 20px rgba(202,162,74,.4)}
   .btn-ghost{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3)}
   .btn-ghost:hover{background:rgba(255,255,255,.18)}
@@ -2281,10 +2283,27 @@ async function insertLink(textarea){
   // Drop it where the words were selected (or at the caret if nothing was selected).
   replaceRange(textarea, s, e, snippet);
 }
+// Image uploads can take a while on a slow connection. Disable the 🖼/📋 buttons
+// (so a slow upload reads as "working", not stuck, and can't be double-triggered) and
+// keep a PERSISTENT status — the normal flash auto-dismisses after 3.5s, which on slow
+// links vanishes mid-upload and looks frozen. A counter supports concurrent uploads.
+let uploadBusy = 0;
+function setUploadBusy(on){
+  uploadBusy = Math.max(0, uploadBusy + (on ? 1 : -1));
+  const busy = uploadBusy > 0;
+  for (const id of ["newImgBtn", "replyImgBtn", "editImgBtn"]){
+    const b = document.getElementById(id); if (!b) continue;
+    b.disabled = busy;
+    if (busy){ if (b.dataset.lbl == null) b.dataset.lbl = b.textContent; b.textContent = "⏳ מעלה…"; }
+    else if (b.dataset.lbl != null){ b.textContent = b.dataset.lbl; delete b.dataset.lbl; }
+  }
+  document.querySelectorAll(".paste-btn").forEach((b) => { b.disabled = busy; });
+}
 // Upload one image File/Blob (from the picker OR a clipboard paste) and embed it.
 async function uploadImageFile(file, textarea){
   if (!file) return;
-  flash("מעלה תמונה…", "ok");
+  setUploadBusy(true);
+  const m = $("msg"); m.textContent = "⏳ מעלה תמונה… (ברשת איטית זה עשוי לקחת זמן)"; m.className = "msg show ok";
   try{
     const fd = new FormData(); fd.append("image", file, file.name || "pasted.png");
     const headers = {}; if (token) headers["Authorization"] = "Bearer " + token;
@@ -2294,6 +2313,7 @@ async function uploadImageFile(file, textarea){
     insertAtCursor(textarea, textarea.dataset.mode === "html" ? `\n<img src="${data.url}">\n` : `\n![](${data.url})\n`);
     flash("התמונה הוטמעה — שלח כדי לפרסם.", "ok");
   } catch(e){ flash(e.message, "err"); }
+  finally{ setUploadBusy(false); }
 }
 async function uploadAndInsert(input, textarea){
   const file = input.files && input.files[0];
