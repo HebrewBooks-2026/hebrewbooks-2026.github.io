@@ -311,6 +311,11 @@
   /* links inside posts */
   .post-link{color:var(--indigo);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
   .post-link:hover{color:var(--gold)}
+  /* file-attachment download chip */
+  .post-file{display:inline-flex;align-items:center;gap:6px;margin:6px 0;padding:7px 13px;border:1px solid var(--line);
+    border-radius:10px;background:var(--card,#fff);color:var(--indigo);font-weight:600;text-decoration:none;
+    word-break:break-all;transition:border-color .12s,color .12s}
+  .post-file:hover{border-color:var(--gold);color:var(--gold)}
   /* rich-text editor toolbar */
   .editor-toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
   .fmt-btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 11px;
@@ -536,8 +541,10 @@
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">שלח תגובה</button>
           <button class="btn btn-light" type="button" id="replyImgBtn">🖼 תמונה</button>
+          <button class="btn btn-light file-attach-btn hidden" type="button" id="replyFileBtn">📎 קובץ</button>
           <button class="btn btn-light" type="button" id="replyLinkBtn">🔗 קישור</button>
           <input type="file" id="replyImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+          <input type="file" id="replyFileInput" class="hidden">
         </div>
       </form>
     </div>
@@ -566,8 +573,10 @@
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">פרסם נושא</button>
           <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
+          <button class="btn btn-light file-attach-btn hidden" type="button" id="newFileBtn">📎 קובץ</button>
           <button class="btn btn-light" type="button" id="newLinkBtn">🔗 קישור</button>
           <input type="file" id="newImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+          <input type="file" id="newFileInput" class="hidden">
         </div>
       </form>
     </div>
@@ -698,8 +707,10 @@
     <div class="row-actions" style="margin-top:12px">
       <button id="editSave" class="btn btn-gold" type="button">שמור</button>
       <button id="editImgBtn" class="btn btn-light" type="button">🖼 תמונה</button>
+      <button id="editFileBtn" class="btn btn-light file-attach-btn hidden" type="button">📎 קובץ</button>
       <button id="editLinkBtn" class="btn btn-light" type="button">🔗 קישור</button>
       <input type="file" id="editImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+      <input type="file" id="editFileInput" class="hidden">
       <button id="editCancel" class="btn btn-light" type="button">ביטול</button>
     </div>
   </div>
@@ -775,6 +786,10 @@ function imgTag(src, alt){ return `<img class="post-img" src="${src}" alt="${alt
 // Links open in a new tab. The URL is already HTML-escaped (esc ran first) and the
 // regexes only ever capture http(s) URLs — so no javascript:/data: scheme can slip in.
 function linkTag(href, label){ return `<a class="post-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`; }
+// File attachments are stored as "/file/<key>" and served with Content-Disposition:
+// attachment, so a click always downloads (the cross-origin `download` attr is best-effort
+// only — the server header is what forces it). Rendered as a labeled chip, not a bare link.
+function fileTag(href, label){ return `<a class="post-file" href="${href}" download rel="noopener noreferrer">📎 ${label}</a>`; }
 // ---- safe HTML mode -------------------------------------------------------
 // A body that starts with HTML_MARK is rendered as HTML — but ONLY through this
 // whitelist sanitizer. The untrusted source is parsed into an INERT document
@@ -799,6 +814,8 @@ function safeStyle(s){
   return out.join(";");
 }
 function safeLinkHref(h){ return /^https?:\/\//i.test(h) ? h : null; }
+// A "/file/<key>" attachment link resolves to this Worker's download endpoint.
+function safeFileHref(h){ return /^\/file\/f_[a-f0-9]{32}$/.test(h) ? API + h : null; }
 function safeImgSrc(s){
   if (/^https?:\/\//i.test(s)) return s;
   if (/^\/img\/[A-Za-z0-9._\-]+$/.test(s)) return API + s;
@@ -811,17 +828,20 @@ function cleanNodes(src, dest){
     const tag = child.tagName;
     if (!SANITIZE_TAGS.has(tag)){ cleanNodes(child, dest); continue; } // unwrap unknown tag, keep its text
     const el = document.createElement(tag);
+    // A "/file/<key>" href marks a download-chip link, styled/behaved differently below.
+    const isFile = tag === "A" && child.hasAttribute("href") && !!safeFileHref(child.getAttribute("href"));
     for (const a of (SANITIZE_ATTRS[tag] || [])){
       if (!child.hasAttribute(a)) continue;
       let v = child.getAttribute(a);
-      if (tag === "A"   && a === "href"){ v = safeLinkHref(v); if (!v) continue; }
+      if (tag === "A"   && a === "href"){ v = isFile ? safeFileHref(v) : safeLinkHref(v); if (!v) continue; }
       if (tag === "IMG" && a === "src" ){ v = safeImgSrc(v);  if (!v) continue; }
       el.setAttribute(a, v);
     }
     if (child.hasAttribute("style")){ const st = safeStyle(child.getAttribute("style")); if (st) el.setAttribute("style", st); }
     if (tag === "A"){
       if (!el.getAttribute("href")){ cleanNodes(child, dest); continue; }  // unsafe href -> unwrap to text
-      el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); el.className = "post-link";
+      if (isFile){ el.setAttribute("download", ""); el.setAttribute("rel", "noopener noreferrer"); el.className = "post-file"; }
+      else { el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); el.className = "post-link"; }
     }
     if (tag === "IMG"){ if (!el.getAttribute("src")) continue; el.setAttribute("loading", "lazy"); el.className = "post-img"; }
     cleanNodes(child, el);
@@ -841,6 +861,9 @@ function renderBody(text){
     // Let the 🖼/🔗 buttons' Markdown work inside HTML mode too (then sanitize as usual).
     src = src.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
       (_, alt, url) => `<img src="${url}" alt="${alt}">`);
+    // file attachments (before the generic-link line, which is http/https only anyway)
+    src = src.replace(/\[([^\]]+)\]\((\/file\/f_[a-f0-9]{32})\)/g,
+      (_, label, url) => `<a href="${url}">📎 ${label}</a>`);
     src = src.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       (_, label, url) => `<a href="${url}">${label}</a>`);
     // .rich resets the surrounding pre-wrap so HTML block tags space themselves naturally.
@@ -879,6 +902,10 @@ function renderBody(text){
   // 1) image markdown ![alt](url) -> <img>
   h = h.replace(/!\[([^\]]*)\]\((\/img\/[A-Za-z0-9._\-]+|https?:\/\/[^\s)]+)\)/g,
     (_, alt, url) => imgTag(resolveImg(url), alt));
+  // 1.5) file-attachment markdown [name](/file/<key>) -> download chip. BEFORE the generic
+  //      link step (whose url pattern is http/https only, so it wouldn't match /file/ anyway).
+  h = h.replace(/\[([^\]]+)\]\((\/file\/f_[a-f0-9]{32})\)/g,
+    (_, label, url) => fileTag(API + url, label));
   // 2) link markdown [text](url) -> <a>  (http/https only; runs AFTER images so ![]() is safe)
   h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     (_, label, url) => linkTag(url, label));
@@ -1001,6 +1028,8 @@ function renderAuth(){
   // role/status-gated UI
   $("newTopicBtn").classList.toggle("hidden", !canPost());
   $("addCatBtn").classList.toggle("hidden", !atLeast("admin"));
+  // file-attachment buttons are admin-only (uploading arbitrary files/scripts is gated)
+  document.querySelectorAll(".file-attach-btn").forEach(b => b.classList.toggle("hidden", !atLeast("admin")));
   updateStatusBanner();
 }
 
@@ -2293,7 +2322,7 @@ let uploadBusy = 0;
 function setUploadBusy(on){
   uploadBusy = Math.max(0, uploadBusy + (on ? 1 : -1));
   const busy = uploadBusy > 0;
-  for (const id of ["newImgBtn", "replyImgBtn", "editImgBtn"]){
+  for (const id of ["newImgBtn", "replyImgBtn", "editImgBtn", "newFileBtn", "replyFileBtn", "editFileBtn"]){
     const b = document.getElementById(id); if (!b) continue;
     b.disabled = busy;
     if (busy){ if (b.dataset.lbl == null) b.dataset.lbl = b.textContent; b.textContent = "⏳ מעלה…"; }
@@ -2321,6 +2350,37 @@ async function uploadAndInsert(input, textarea){
   const file = input.files && input.files[0];
   input.value = "";  // allow re-picking the same file later
   await uploadImageFile(file, textarea);
+}
+// Human-readable byte size for the attachment chip label.
+function fmtBytes(n){
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(n < 10*1024 ? 1 : 0) + " KB";
+  return (n/(1024*1024)).toFixed(1) + " MB";
+}
+// Upload one arbitrary file (admin-only on the server) and embed it as a download chip.
+// Mirrors uploadImageFile, but posts to /upload-file and inserts a [name](/file/key) link.
+async function uploadAttachmentFile(file, textarea){
+  if (!file) return;
+  setUploadBusy(true);
+  const m = $("msg"); m.textContent = "⏳ מעלה קובץ… (ברשת איטית זה עשוי לקחת זמן)"; m.className = "msg show ok";
+  try{
+    const fd = new FormData(); fd.append("file", file, file.name || "attachment");
+    const headers = {}; if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(API + "/upload-file", { method:"POST", headers, body:fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    // The chip label carries the original name + size; the /file/ link is what fileTag renders.
+    // Strip [] from the name so it can't break the [label](url) markdown we're about to build.
+    const label = `${String(data.name).replace(/[\[\]]/g, "")} (${fmtBytes(data.size)})`;
+    insertAtCursor(textarea, `\n[${label}](${data.url})\n`);
+    flash("הקובץ צורף — שלח כדי לפרסם.", "ok");
+  } catch(e){ flash(e.message, "err"); }
+  finally{ setUploadBusy(false); }
+}
+async function uploadAttachmentAndInsert(input, textarea){
+  const file = input.files && input.files[0];
+  input.value = "";  // allow re-picking the same file later
+  await uploadAttachmentFile(file, textarea);
 }
 // Let users paste an image straight from the clipboard into a compose box.
 function enableImagePaste(ta){
@@ -2800,6 +2860,11 @@ $("replyImgBtn").onclick = () => $("replyImgInput").click();
 $("replyImgInput").onchange = () => uploadAndInsert($("replyImgInput"), $("replyBody"));
 $("newImgBtn").onclick = () => $("newImgInput").click();
 $("newImgInput").onchange = () => uploadAndInsert($("newImgInput"), $("newBody"));
+// file-attachment buttons (admin-only; the buttons stay hidden for everyone else)
+$("replyFileBtn").onclick = () => $("replyFileInput").click();
+$("replyFileInput").onchange = () => uploadAttachmentAndInsert($("replyFileInput"), $("replyBody"));
+$("newFileBtn").onclick = () => $("newFileInput").click();
+$("newFileInput").onchange = () => uploadAttachmentAndInsert($("newFileInput"), $("newBody"));
 
 // link insert buttons
 $("replyLinkBtn").onclick = () => insertLink($("replyBody"));
@@ -2893,6 +2958,8 @@ $("editCancel").onclick = closeEdit;
 $("editOverlay").onclick = (e) => { if (e.target === $("editOverlay")) closeEdit(); };
 $("editImgBtn").onclick = () => $("editImgInput").click();
 $("editImgInput").onchange = () => uploadAndInsert($("editImgInput"), $("editBody"));
+$("editFileBtn").onclick = () => $("editFileInput").click();
+$("editFileInput").onchange = () => uploadAttachmentAndInsert($("editFileInput"), $("editBody"));
 // notifications bell
 $("bellBtn").onclick = openNotifications;
 $("profileClose").onclick = closeProfile;
