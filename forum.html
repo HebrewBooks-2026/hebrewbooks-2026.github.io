@@ -278,6 +278,10 @@
   .pin-btn.on{background:#fdf3d6;border-color:var(--gold);color:#7a5a14}
   .pin-badge{font-size:.74rem;font-weight:800;color:#7a5a14;background:#fdf3d6;border:1px solid var(--gold-soft);border-radius:999px;padding:2px 9px;white-space:nowrap}
   .pin-badge.global{color:#5a3e8a;background:#efe9fb;border-color:#d6cbf0}
+  /* prominent pinned banner on top of a pinned post card */
+  .pin-strip{display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:800;color:#7a5a14;
+    background:linear-gradient(180deg,#fdf3d6,#f7e7bc);border:1px solid var(--gold);
+    border-radius:9px;padding:6px 12px;margin-bottom:10px}
   .post.pinned{background:#fffdf5;border-inline-start:3px solid var(--gold);border-radius:0 11px 11px 0}
   .activity-row.pinned{background:#fffdf5;border-inline-start:3px solid var(--gold)}
   .act-pin{font-size:.72rem;font-weight:800;color:#7a5a14;background:#fdf3d6;border:1px solid var(--gold-soft);border-radius:999px;padding:1px 8px;display:inline-block;margin-bottom:4px}
@@ -1867,13 +1871,16 @@ function postHtml(o, byId){
   const replyCtx = parent
     ? `<div class="reply-to" data-act="gotopost" data-id="${parent.id}">↩ בתשובה ל<b>${esc(parent.author)}</b></div>` : "";
   const ind = Math.min(depth, 6) * 24;   // cap the visual indent; the link still names the real parent
+  // prominent full-width "pinned" banner on top of the card (a clear sign, not a tiny pill)
+  const pinStrip = (p.is_pinned || p.is_pinned_global)
+    ? `<div class="pin-strip">${[p.is_pinned?'📌 נעוץ בראש הנושא':'', p.is_pinned_global?'🌐 נעוץ בפיד הכללי':''].filter(Boolean).join(' · ')}</div>`
+    : "";
   return `<div class="post${isSolution?' solution':''}${p.is_pinned?' pinned':''}${depth?' nested':''}" id="post-${p.id}"${depth?` style="margin-inline-start:${ind}px"`:""}>
+    ${pinStrip}
     ${replyCtx}
     <div class="post-head">
       ${toggle}
       <span class="who user-link" data-uid="${p.user_id}">${esc(p.author)}</span>${roleTag}
-      ${p.is_pinned?'<span class="pin-badge">📌 נעוץ בנושא</span>':''}
-      ${p.is_pinned_global?'<span class="pin-badge global">🌐 נעוץ בכללי</span>':''}
       ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
       <span class="when">${when(p.created_at)}${editedNote}</span>
       ${collapsedTag}
