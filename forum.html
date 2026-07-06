@@ -274,6 +274,13 @@
   .sol-badge{font-size:.74rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:2px 9px}
   .post.solution{background:#f4faf6;border-inline-start:3px solid var(--ok);border-radius:0 11px 11px 0}
   .solved-tag{font-size:.72rem;font-weight:800;color:var(--ok);background:#e7f3ea;border-radius:999px;padding:1px 8px;margin-inline-start:8px;white-space:nowrap}
+  /* pinned post: gold badge + button highlight + post/feed-row accent */
+  .pin-btn.on{background:#fdf3d6;border-color:var(--gold);color:#7a5a14}
+  .pin-badge{font-size:.74rem;font-weight:800;color:#7a5a14;background:#fdf3d6;border:1px solid var(--gold-soft);border-radius:999px;padding:2px 9px;white-space:nowrap}
+  .pin-badge.global{color:#5a3e8a;background:#efe9fb;border-color:#d6cbf0}
+  .post.pinned{background:#fffdf5;border-inline-start:3px solid var(--gold);border-radius:0 11px 11px 0}
+  .activity-row.pinned{background:#fffdf5;border-inline-start:3px solid var(--gold)}
+  .act-pin{font-size:.72rem;font-weight:800;color:#7a5a14;background:#fdf3d6;border:1px solid var(--gold-soft);border-radius:999px;padding:1px 8px;display:inline-block;margin-bottom:4px}
 
   form.compose{padding:18px;display:flex;flex-direction:column;gap:12px}
   label.fld{font-weight:700;font-size:.9rem;color:var(--muted)}
@@ -1629,12 +1636,13 @@ async function loadActivity(opts){
   if (!data.activity.length){ activitySig = ""; box.innerHTML = `<div class="empty">אין עדיין פעילות.</div>`; renderActivityPager(0, data.page_size||30); return; }
   // A background (silent) refresh rebuilds the DOM only when something actually changed —
   // otherwise it leaves the list (and the scroll position) untouched: no flash, no jump.
-  const sig = data.activity.map(a => a.id).join(",") + "|" + (data.total||0) + "|p" + activityPage;
+  const sig = data.activity.map(a => a.id + (a.is_pinned_global?"P":"")).join(",") + "|" + (data.total||0) + "|p" + activityPage;
   if (opts.silent && sig === activitySig) return;
   activitySig = sig;
   box.innerHTML = data.activity.map(a => {
     const verb = a.is_opening ? "פתח/ה נושא" : "הגיב/ה ב";
-    return `<div class="activity-row" data-topic="${a.topic_id}" data-post="${a.id}">
+    return `<div class="activity-row${a.is_pinned_global?' pinned':''}" data-topic="${a.topic_id}" data-post="${a.id}">
+      ${a.is_pinned_global?'<div class="act-pin">🌐 נעוץ</div>':''}
       <div class="act-line"><b class="user-link" data-uid="${a.author_id}">${esc(a.author)}</b> ${verb} <span class="act-topic">${esc(a.topic_title)}</span></div>
       ${a.snippet?`<div class="act-snippet">${esc(a.snippet)}</div>`:""}
       <div class="act-when">${when(a.created_at)}</div>
@@ -1760,11 +1768,15 @@ function buildThread(){
   const kids = new Map();
   const roots = [];
   for (const p of curPosts){
-    const par = (p.reply_to && byId.has(p.reply_to)) ? p.reply_to : null;
+    // a topic-pinned post is detached from its parent and treated as a root, so it (with
+    // its own subtree) can float to the very top of the topic — see the sort below.
+    const par = (!p.is_pinned && p.reply_to && byId.has(p.reply_to)) ? p.reply_to : null;
     if (par == null) roots.push(p);
     else (kids.get(par) || kids.set(par, []).get(par)).push(p);
   }
-  return { byId, kids, roots };
+  // pinned roots first (stable partition keeps chronological order within each group)
+  const pinned = roots.filter(r => r.is_pinned), rest = roots.filter(r => !r.is_pinned);
+  return { byId, kids, roots: pinned.concat(rest) };
 }
 // Which page holds a post — by its conversation ROOT's position (whole subtrees stay
 // on one page, so a post and its parent are always together).
@@ -1772,7 +1784,8 @@ function pageOfPost(postId){
   const { byId, roots } = buildThread();
   let cur = byId.get(postId);
   if (!cur) return 1;
-  while (cur.reply_to && byId.has(cur.reply_to)) cur = byId.get(cur.reply_to);
+  // stop at a pinned post — buildThread makes it a root, so it's its own conversation head
+  while (cur.reply_to && byId.has(cur.reply_to) && !cur.is_pinned) cur = byId.get(cur.reply_to);
   const idx = roots.findIndex(r => r.id === cur.id);
   return idx < 0 ? 1 : Math.floor(idx / POSTS_PER_PAGE) + 1;
 }
@@ -1812,6 +1825,9 @@ function postHtml(o, byId){
   const mine = me && me.id === p.user_id;
   const isSolution = !!(curTopic && curTopic.solution_post_id === p.id);
   const canMarkSolution = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
+  // pin within the topic: owner or staff. pin globally (site "הכל" feed): staff only.
+  const canPinTopic = canPost() && me && curTopic && (me.id === curTopic.user_id || atLeast("moderator"));
+  const canPinGlobal = canPost() && atLeast("moderator");
   const canReply = canPost() && curTopic && (!curTopic.is_locked || atLeast("moderator"));
   let actions = "";
   // like — 👍 toggles; the count (when >0) reveals who liked on hover.
@@ -1831,6 +1847,10 @@ function postHtml(o, byId){
     actions += `<button class="btn btn-light btn-sm" data-act="report" data-id="${p.id}" title="דווח על תוכן לא ראוי">🚩</button>`;
   if (canMarkSolution)
     actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
+  if (canPinTopic)
+    actions += `<button class="btn btn-light btn-sm pin-btn ${p.is_pinned?'on':''}" data-act="pin" data-scope="topic" data-id="${p.id}">${p.is_pinned?"📌 שחרר מהנושא":"📌 נעץ בנושא"}</button>`;
+  if (canPinGlobal)
+    actions += `<button class="btn btn-light btn-sm pin-btn ${p.is_pinned_global?'on':''}" data-act="pin" data-scope="global" data-id="${p.id}">${p.is_pinned_global?"🌐 שחרר מהכללי":"🌐 נעץ בכללי"}</button>`;
   let staff = "";
   if (atLeast("moderator") && !mine)
     staff += `<button class="btn btn-light btn-sm" data-act="block" data-uid="${p.user_id}" data-name="${esc(p.author)}">חסום</button>`;
@@ -1847,11 +1867,13 @@ function postHtml(o, byId){
   const replyCtx = parent
     ? `<div class="reply-to" data-act="gotopost" data-id="${parent.id}">↩ בתשובה ל<b>${esc(parent.author)}</b></div>` : "";
   const ind = Math.min(depth, 6) * 24;   // cap the visual indent; the link still names the real parent
-  return `<div class="post${isSolution?' solution':''}${depth?' nested':''}" id="post-${p.id}"${depth?` style="margin-inline-start:${ind}px"`:""}>
+  return `<div class="post${isSolution?' solution':''}${p.is_pinned?' pinned':''}${depth?' nested':''}" id="post-${p.id}"${depth?` style="margin-inline-start:${ind}px"`:""}>
     ${replyCtx}
     <div class="post-head">
       ${toggle}
       <span class="who user-link" data-uid="${p.user_id}">${esc(p.author)}</span>${roleTag}
+      ${p.is_pinned?'<span class="pin-badge">📌 נעוץ בנושא</span>':''}
+      ${p.is_pinned_global?'<span class="pin-badge global">🌐 נעוץ בכללי</span>':''}
       ${isSolution?'<span class="sol-badge">✓ פתרון</span>':''}
       <span class="when">${when(p.created_at)}${editedNote}</span>
       ${collapsedTag}
@@ -1876,6 +1898,7 @@ function wirePostActions(){
     if (act === "gotopost") return jumpToPost(id);
     if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
+    if (act === "pin") return pinPost(id, el.getAttribute("data-scope"));
     if (act === "block") return staffBlock(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"));
     if (act === "role")  return staffRole(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
   });
@@ -2049,6 +2072,21 @@ async function markSolution(postId){
     const r = await api(`/topics/${curTopicId}/solution`, { method:"PATCH", body:{ post_id: postId }});
     if (curTopic) curTopic.solution_post_id = r.solution_post_id;
     flash(r.solution_post_id ? "התגובה סומנה כפתרון." : "סימון הפתרון בוטל.", "ok");
+    renderThread();
+  } catch(e){ flash(e.message, "err"); }
+}
+// Pin/unpin a post. scope="topic" floats it to the top of THIS topic; scope="global"
+// floats it to the top of the site-wide "הכל" feed. Toggles off if already pinned.
+async function pinPost(postId, scope){
+  const p = curPosts.find(x => x.id === postId); if (!p) return;
+  const col = scope === "global" ? "is_pinned_global" : "is_pinned";
+  const want = p[col] ? 0 : 1;
+  try{
+    const r = await api(`/posts/${postId}/pin`, { method:"PATCH", body:{ pinned: !!want, scope }});
+    p[col] = r.pinned ? 1 : 0;
+    flash(r.pinned
+      ? (scope === "global" ? "הפוסט נעוץ בפיד הכללי." : "הפוסט נעוץ בראש הנושא.")
+      : "הנעיצה בוטלה.", "ok");
     renderThread();
   } catch(e){ flash(e.message, "err"); }
 }
