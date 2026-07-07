@@ -296,6 +296,10 @@
 
   .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:700;cursor:pointer;margin-bottom:14px}
   .back:hover{color:var(--ink)}
+  /* breadcrumb (topic header): "→ כל הנושאים › קטגוריה" — each part a link to that view */
+  .crumb{color:var(--indigo);font-weight:700;text-decoration:none}
+  .crumb:hover{color:var(--gold);text-decoration:underline}
+  .crumb-sep,.crumb-back{color:var(--muted)}
   .hidden{display:none!important}
   .signed-note{color:var(--muted);text-align:center;padding:22px;font-weight:600}
 
@@ -409,7 +413,7 @@
   .topic-header{position:sticky;top:72px;z-index:30;
     background:var(--parch);padding-top:10px;padding-bottom:12px;margin-bottom:14px;
     box-shadow:0 10px 12px -10px rgba(21,35,63,.18)}
-  .topic-header .back{margin-bottom:8px}
+  .topic-header .back{margin-bottom:8px;flex-wrap:wrap;cursor:default}
   .topic-header .panel-head{margin-bottom:0}
   .head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
   .topic-search{margin-top:12px;max-width:300px;padding:7px 12px;font-size:.86rem}
@@ -1701,6 +1705,25 @@ async function openTopic(id, opts){
   const anchor = opts.page ? null : (location.hash.match(/[#&]post=(\d+)/) || [])[1];
   curPostPage = opts.page || (anchor ? pageOfPost(parseInt(anchor, 10)) : 1);
   $("topicTitle").innerHTML = (t.is_pinned?'<span class="pin">📌 </span>':'') + (t.is_locked?'<span class="lock">🔒 </span>':'') + esc(t.title);
+
+  // breadcrumb in the sticky header (replaces the plain "back to topics"): shows WHERE this
+  // topic lives — "כל הנושאים › [קטגוריית-אב] › [קטגוריה]", each a clickable link. Stays put
+  // while scrolling because .topic-header is sticky.
+  const cat = (typeof cats !== "undefined" && cats) ? cats.find(c => c.id === t.category_id) : null;
+  let crumbs = `<a class="crumb" data-crumb="home" href="#">כל הנושאים</a>`;
+  if (cat){
+    const parent = cat.parent_id ? cats.find(c => c.id === cat.parent_id) : null;
+    if (parent) crumbs += `<span class="crumb-sep">›</span><a class="crumb" data-crumb="cat" data-id="${parent.id}" href="#cat=${parent.id}">${esc(parent.name)}</a>`;
+    crumbs += `<span class="crumb-sep">›</span><a class="crumb" data-crumb="cat" data-id="${cat.id}" href="#cat=${cat.id}">${esc(cat.name)}</a>`;
+  }
+  const back = $("backFromTopic");
+  back.innerHTML = `<span class="crumb-back">→</span>${crumbs}`;
+  back.querySelectorAll(".crumb").forEach(el => el.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();                  // don't also trigger the row's goList
+    const kind = el.getAttribute("data-crumb");
+    if (kind === "home") goCat(null);
+    else goCat(parseInt(el.getAttribute("data-id"), 10));
+  });
 
   // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
   const mod = $("topicMod"); mod.innerHTML = "";
