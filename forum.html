@@ -564,7 +564,6 @@
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
         <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
-        <button id="supportBtn" class="bell" type="button" title="תמיכה ודיווח באגים בתוכנה" aria-label="תמיכה">🛠️</button>
         <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
@@ -3402,8 +3401,7 @@ $("reportsOverlay").onclick = (e) => { if (e.target === $("reportsOverlay")) clo
 // admin users modal
 $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
-// support (AI bug-report) modal
-$("supportBtn").onclick = goSupport;
+// support (AI bug-report) modal — entry is the floating bubble (supportFab)
 $("supportFab").onclick = goSupport;
 $("supportClose").onclick = closeSupport;
 $("ticketCloseChat").onclick = closeSupport;
