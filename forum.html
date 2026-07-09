@@ -2454,6 +2454,7 @@ function notifText(n){
     case "like":     return { ic:"👍", html:`${who} סימן לייק לתגובה שלך ב־${topic}` };
     case "solution": return { ic:"✓",  html:`${who} סימן את התגובה שלך כפתרון ב־${topic}` };
     case "activity": return { ic:"📋", html:`פעילות חדשה: ${who} ב־${topic}` };
+    case "support_dev": return { ic:"🛠️", html:`פנייה בתמיכה דורשת טיפול${n.ticket_title?`: ״${esc(n.ticket_title)}״`:""} (מאת ${who})` };
     default:         return { ic:"🔔", html:`${who} · ${topic}` };
   }
 }
@@ -2462,7 +2463,7 @@ function renderNotifList(items){
   if (!items.length){ box.innerHTML = `<div class="empty">אין התראות עדיין.</div>`; return; }
   const row = (n) => {
     const tx = notifText(n);
-    return `<div class="notif ${n.is_read?'':'unread'}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}">
+    return `<div class="notif ${n.is_read?'':'unread'}" data-id="${n.id}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}" data-ticket="${n.ticket_id||''}">
       <span class="notif-ic">${tx.ic}</span>
       <span class="notif-tx">${tx.html}<div class="notif-when">${when(n.created_at)}</div></span>
     </div>`;
@@ -2477,6 +2478,16 @@ function renderNotifList(items){
   box.innerHTML = html;
   box.querySelectorAll(".notif").forEach(el => el.onclick = async () => {
     const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
+    const tkt = el.getAttribute("data-ticket"), nid = el.getAttribute("data-id");
+    // support escalation → mark THIS notice read, then open the ticket in the support window
+    if (tkt){
+      try{ const r = await api("/notifications/read", { method:"POST", body:{ id: parseInt(nid,10) } }); setBell(r.unread); }catch{}
+      closeNotifications();
+      if (location.hash !== "#support") history.pushState(null, "", "#support");
+      await openSupport();
+      openTicket(parseInt(tkt,10));
+      return;
+    }
     // visiting a thread clears ONLY that thread's notifications (not every unread one)
     if (tid){
       try{ const r = await api("/notifications/read", { method:"POST", body:{ topic_id: parseInt(tid,10) } }); setBell(r.unread); }
