@@ -556,6 +556,31 @@
   .support-fab:hover .fab-tip{opacity:1;transform:translateY(-50%) translateX(0)}
   @media (max-width:640px){ .support-fab{width:54px;height:54px;bottom:16px;right:16px} .support-fab .fab-tip{display:none} }
   @media (prefers-reduced-motion:reduce){ .support-fab::after{animation:none} }
+  /* ---- private messages (DMs). Chat bubbles reuse .support-msgs / .s-msg. ---- */
+  .s-me{align-self:flex-end;background:#fbf7ec;border:1px solid var(--gold-soft)}
+  .s-them{align-self:flex-start;background:#eef2fb;border:1px solid #d6e0f5}
+  .dm-participants{font-size:.78rem;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:4px}
+  .dm-participants .dm-part{background:#f2f2f2;border-radius:999px;padding:1px 9px}
+  .dm-participants .dm-part.staff{background:var(--gold-soft)}
+  /* recipient picker (chips + typeahead) on the new-conversation form */
+  .dm-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid var(--line);
+    border-radius:11px;padding:6px 8px;background:#fff;min-height:44px}
+  .dm-picker:focus-within{border-color:var(--gold)}
+  .dm-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .dm-chip{display:inline-flex;align-items:center;gap:6px;background:var(--gold-soft);
+    border-radius:999px;padding:2px 6px 2px 10px;font-size:.86rem;font-weight:700}
+  .dm-chip .x{cursor:pointer;border:none;background:#0002;border-radius:50%;width:17px;height:17px;
+    line-height:15px;font-size:.8rem;color:#333;padding:0}
+  .dm-toinput{flex:1;min-width:130px;border:none;outline:none;font:inherit;background:transparent;padding:4px}
+  .dm-row{display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:11px 10px;border-bottom:1px solid var(--line)}
+  .dm-row:hover{background:#faf7ef}
+  .dm-row.unread{background:#fbf7ec}
+  .dm-main{flex:1;min-width:0}
+  .dm-subject{font-weight:800;margin-bottom:2px}
+  .dm-with{font-size:.82rem;color:var(--muted)}
+  .dm-snippet{font-size:.86rem;color:#555;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dm-when{font-size:.74rem;color:var(--muted);margin-top:3px}
+  .dm-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);flex:none;margin-top:6px}
 </style>
 </head>
 <body>
@@ -566,6 +591,7 @@
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
         <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
+        <button id="dmBtn" class="bell hidden" type="button" title="הודעות פרטיות" aria-label="הודעות פרטיות">✉️<span id="dmBadge" class="bell-badge hidden">0</span></button>
         <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
@@ -926,6 +952,74 @@
   <span class="fab-tip">נתקלת בבאג? דברו איתנו</span>
 </button>
 
+<!-- private messages (DMs). Same two-pane shape as support: a conversation list and a
+     single conversation's chat. Reuses the .support-* / .s-msg chat styles. -->
+<div id="dmOverlay" class="modal-overlay hidden">
+  <div class="modal support-modal" role="dialog" aria-modal="true" style="max-width:720px">
+
+    <!-- ===== list pane ===== -->
+    <div id="dmListPane">
+      <div class="support-head">
+        <h2>✉️ הודעות פרטיות</h2>
+        <div class="support-head-btns">
+          <button id="dmOversightBtn" class="btn btn-light btn-sm hidden" type="button" title="צפייה בכל השיחות הפרטיות (מנהל)">🔎 כל השיחות</button>
+          <button id="newDmBtn" class="btn btn-gold btn-sm" type="button">+ שיחה חדשה</button>
+        </div>
+      </div>
+      <p class="support-intro" id="dmIntro">שוחח באופן פרטי עם צוות הפורום. שיחה יכולה לכלול כמה משתתפים, וחבר צוות יכול לצרף אליה עוד אנשים.</p>
+
+      <!-- new-conversation form (collapsed by default) -->
+      <form id="newDmForm" class="support-newform hidden">
+        <div>
+          <label class="fld">אל</label>
+          <div id="dmToPicker" class="dm-picker">
+            <span id="dmToChips" class="dm-chips"></span>
+            <input id="dmToInput" class="dm-toinput" autocomplete="off" placeholder="הקלד שם ובחר נמען…">
+          </div>
+          <div id="dmToPop" class="mention-pop hidden"></div>
+        </div>
+        <div>
+          <label class="fld">נושא (רשות)</label>
+          <input id="dmSubject" class="in" maxlength="300" placeholder="על מה השיחה?">
+        </div>
+        <div>
+          <label class="fld">הודעה</label>
+          <textarea id="dmBody" class="in" placeholder="כתוב את הודעתך…" required></textarea>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit" id="dmSend">שלח</button>
+          <button class="btn btn-light" type="button" id="dmCancel">ביטול</button>
+        </div>
+      </form>
+
+      <div id="dmList" class="modal-body" style="max-height:55vh;overflow:auto"></div>
+      <div class="modal-actions"><button id="dmClose" class="btn btn-light" type="button">סגור</button></div>
+    </div>
+
+    <!-- ===== chat pane ===== -->
+    <div id="dmChatPane" class="hidden">
+      <div class="support-chat-head">
+        <span class="back" id="dmChatBack">→ חזרה לשיחות</span>
+        <div class="support-chat-title">
+          <h2 id="dmChatTitle"></h2>
+          <div id="dmChatParticipants" class="dm-participants"></div>
+        </div>
+        <button id="dmAddBtn" class="btn btn-light btn-sm hidden" type="button" title="צרף משתתף לשיחה">＋ צרף משתתף</button>
+      </div>
+      <div id="dmOversightNote" class="support-blocked-note hidden">🔎 מצב פיקוח — צפייה בלבד. אינך משתתף בשיחה זו.</div>
+      <div id="dmMessages" class="support-msgs"></div>
+      <form id="dmReplyForm" class="support-reply">
+        <textarea id="dmReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit" id="dmReplySend">שלח</button>
+          <button class="btn btn-light" type="button" id="dmChatClose">סגור</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
 <script>
 // ====== config ======
 const API = "https://hebrewbooks-forum-api.hebrewbooks.workers.dev";
@@ -954,6 +1048,14 @@ let curTicket = null;     // the open ticket object (chat pane)
 let ntLogKey = null, ntLogFileName = null;  // staged log upload for a new ticket
 let supportPollTimer = null;                // polls an open ticket for the async code analysis
 let supportSig = "";                        // last-rendered chat signature (skip idle re-renders)
+// private-message (DM) state
+let dmConversations = [];   // cached conversation list (mine, or all in oversight mode)
+let curConvo = null;        // the open conversation object (chat pane)
+let dmOversight = false;    // admin: showing ALL conversations (read-only) vs. mine
+let dmPollTimer = null;     // polls an open conversation for new messages
+let dmSig = "";             // last-rendered chat signature (skip idle re-renders)
+let dmToSel = [];           // selected recipients for the new-conversation picker [{id,display_name,role}]
+let dmToTimer = null;       // debounce handle for the recipient typeahead
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -1193,7 +1295,8 @@ async function api(path, opts){
 function renderAuth(){
   const slot = $("authSlot");
   $("bellBtn").classList.toggle("hidden", !me);   // bell only for signed-in users
-  if (!me) setBell(0);
+  $("dmBtn").classList.toggle("hidden", !me);     // private-message inbox only for signed-in users
+  if (!me){ setBell(0); setDmBadge(0); }
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
@@ -1706,6 +1809,233 @@ function backToTicketList(){
   curTicket = null;
 }
 
+// ====== private messages (DMs) ======
+// A member may only open a conversation toward staff; staff can message anyone. Only a
+// staff participant may add someone to a conversation. Admins get read-only oversight of
+// every conversation (the "כל השיחות" toggle) but aren't participants and can't post there.
+function setDmBadge(n){
+  const b = $("dmBadge");
+  if (n > 0){ b.textContent = n > 99 ? "99+" : n; b.classList.remove("hidden"); }
+  else b.classList.add("hidden");
+}
+async function refreshDmBadge(){
+  if (!me) return;
+  try{ const r = await api("/dm/unread"); setDmBadge(r.unread); } catch{}
+}
+function goDm(){
+  if (location.hash !== "#dm") history.pushState(null, "", "#dm");
+  openDm();
+}
+async function openDm(){
+  if (!me){ openAuth(); return; }
+  $("dmOverlay").classList.remove("hidden");
+  backToConvoList();
+  dmOversight = false;
+  $("dmOversightBtn").classList.toggle("hidden", !atLeast("admin"));
+  $("dmOversightBtn").textContent = "🔎 כל השיחות";
+  await loadConversations();
+}
+function closeDm(){
+  $("dmOverlay").classList.add("hidden");
+  stopDmPoll();
+  if (location.hash === "#dm") history.replaceState(null, "", location.pathname + location.search);
+}
+function backToConvoList(){
+  stopDmPoll();
+  $("dmChatPane").classList.add("hidden");
+  $("dmListPane").classList.remove("hidden");
+  hideNewDmForm();
+  curConvo = null;
+}
+
+async function loadConversations(){
+  const box = $("dmList");
+  box.innerHTML = `<div class="empty">טוען…</div>`;
+  try{
+    dmConversations = (await api(dmOversight ? "/admin/dm" : "/dm")).conversations;
+  }catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderConversations();
+}
+// One conversation's "with" line = its participants other than me (or all, in oversight).
+function convoWith(c){
+  const others = (c.participants || []).filter(p => dmOversight || p.id !== me.id);
+  const names = (others.length ? others : (c.participants || [])).map(p => esc(p.display_name));
+  return names.join("، ") || "—";
+}
+function renderConversations(){
+  const box = $("dmList");
+  $("dmIntro").classList.toggle("hidden", dmOversight);
+  if (!dmConversations.length){
+    box.innerHTML = `<div class="empty">${dmOversight ? "אין שיחות פרטיות בפורום." : "אין עדיין שיחות. פתח שיחה חדשה כדי לשוחח בפרטי עם הצוות."}</div>`;
+    return;
+  }
+  box.innerHTML = dmConversations.map(c => `
+    <div class="dm-row ${c.unread?'unread':''}" data-id="${c.id}">
+      ${c.unread?'<span class="dm-dot"></span>':''}
+      <div class="dm-main">
+        <div class="dm-subject">${c.subject?esc(c.subject):esc(convoWith(c))}</div>
+        ${c.subject?`<div class="dm-with">${esc(convoWith(c))}</div>`:""}
+        ${c.snippet?`<div class="dm-snippet">${esc(c.snippet)}</div>`:""}
+        <div class="dm-when">${when(c.last_msg_at)}${dmOversight&&c.message_count?` · ${c.message_count} הודעות`:""}</div>
+      </div>
+    </div>`).join("");
+  box.querySelectorAll(".dm-row").forEach(el => el.onclick = () => openConversation(parseInt(el.dataset.id,10)));
+}
+
+// ---- new conversation: recipient picker ----
+function showNewDmForm(prefill){
+  resetNewDmForm();
+  $("newDmForm").classList.remove("hidden");
+  if (prefill && prefill.id){ addDmRecipient(prefill); }
+  else $("dmToInput").focus();
+}
+function hideNewDmForm(){ $("newDmForm").classList.add("hidden"); $("dmToPop").classList.add("hidden"); }
+function resetNewDmForm(){
+  dmToSel = []; renderDmChips();
+  $("dmToInput").value = ""; $("dmSubject").value = ""; $("dmBody").value = "";
+  $("dmToPop").classList.add("hidden");
+}
+function renderDmChips(){
+  $("dmToChips").innerHTML = dmToSel.map(u =>
+    `<span class="dm-chip">${esc(u.display_name)}<button type="button" class="x" data-id="${u.id}" aria-label="הסר">×</button></span>`).join("");
+  $("dmToChips").querySelectorAll(".x").forEach(b => b.onclick = () => {
+    dmToSel = dmToSel.filter(x => x.id !== parseInt(b.dataset.id,10)); renderDmChips();
+  });
+}
+function addDmRecipient(u){
+  if (!dmToSel.some(x => x.id === u.id)) dmToSel.push({ id:u.id, display_name:u.display_name, role:u.role });
+  renderDmChips();
+  $("dmToInput").value = ""; $("dmToPop").classList.add("hidden"); $("dmToInput").focus();
+}
+async function dmRecipientSearch(q){
+  // A member may only address staff → ask the server for staff only. Staff see everyone.
+  const staffParam = atLeast("moderator") ? "" : "&staff=1";
+  let members = [];
+  try{ members = (await api(`/members?q=${encodeURIComponent(q)}${staffParam}`)).members; } catch{ return; }
+  members = members.filter(m => m.id !== me.id && !dmToSel.some(s => s.id === m.id));
+  const pop = $("dmToPop");
+  if (!members.length){ pop.classList.add("hidden"); return; }
+  pop.innerHTML = members.map(m =>
+    `<div class="mention-item" data-id="${m.id}" data-name="${esc(m.display_name)}" data-role="${m.role||'member'}">${esc(m.display_name)}${m.role&&m.role!=='member'?` <span class="role-tag role-${m.role}">${m.role==='admin'?'מנהל':'מודרטור'}</span>`:""}</div>`).join("");
+  const box = $("dmToPicker").getBoundingClientRect();
+  pop.style.left = box.left + "px"; pop.style.top = (box.bottom + 4) + "px"; pop.style.minWidth = box.width + "px";
+  pop.classList.remove("hidden");
+  pop.querySelectorAll(".mention-item").forEach(el => el.onclick = () =>
+    addDmRecipient({ id:parseInt(el.dataset.id,10), display_name:el.dataset.name, role:el.dataset.role }));
+}
+async function submitNewDm(){
+  const body = $("dmBody").value.trim();
+  if (!dmToSel.length){ flash("נא לבחור נמען.", "err"); return; }
+  if (!body){ flash("נא לכתוב הודעה.", "err"); return; }
+  const btn = $("dmSend"); btn.disabled = true;
+  try{
+    const r = await api("/dm", { method:"POST", body:{ to: dmToSel.map(u => u.id), subject: $("dmSubject").value.trim(), body }});
+    hideNewDmForm();
+    await loadConversations();
+    openConversation(r.conversation_id);
+  }catch(e){ flash(e.message, "err"); }
+  finally{ btn.disabled = false; }
+}
+
+// ---- one conversation (chat pane) ----
+async function openConversation(id){
+  stopDmPoll();
+  $("dmListPane").classList.add("hidden");
+  $("dmChatPane").classList.remove("hidden");
+  $("dmMessages").innerHTML = `<div class="empty">טוען…</div>`;
+  dmSig = "";
+  try{ await refreshConversation(id); }
+  catch(e){ $("dmMessages").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  startDmPoll(id);
+  refreshDmBadge();   // opening marks it read server-side; sync the inbox badge…
+  refreshBell();      // …and the bell (its 'dm' notice for this thread was cleared too)
+}
+async function refreshConversation(id, silent){
+  const data = await api("/dm/" + id);
+  curConvo = data;
+  const sig = data.messages.map(m => m.id).join(",");
+  if (silent && sig === dmSig) return;
+  dmSig = sig;
+  renderConvoChat(data);
+}
+function renderConvoChat(data){
+  const c = data.conversation;
+  $("dmChatTitle").textContent = c.subject || convoWith({ participants:data.participants });
+  $("dmChatParticipants").innerHTML = (data.participants||[]).map(p =>
+    `<span class="dm-part ${RANK_ROLE(p.role)>=2?'staff':''}">${esc(p.display_name)}</span>`).join("");
+  $("dmAddBtn").classList.toggle("hidden", !data.can_add);
+  $("dmOversightNote").classList.toggle("hidden", !data.oversight);
+  $("dmReplyForm").classList.toggle("hidden", !data.can_post);
+  const box = $("dmMessages");
+  box.innerHTML = (data.messages||[]).map(m => {
+    if (m.kind === "system") return `<div class="s-msg s-system">${renderBody(m.body)}<div class="s-when">${when(m.created_at)}</div></div>`;
+    const mine = m.user_id === me.id;
+    return `<div class="s-msg ${mine?'s-me':'s-them'}">
+      <div class="s-who">${mine?"אני":esc(m.author||"משתמש")}</div>
+      <div>${renderBody(m.body)}</div>
+      <div class="s-when">${when(m.created_at)}</div>
+    </div>`;
+  }).join("");
+  box.scrollTop = box.scrollHeight;
+}
+// member=1, moderator=2, admin=3 — small client-side mirror for badge styling.
+function RANK_ROLE(r){ return r === "admin" ? 3 : r === "moderator" ? 2 : 1; }
+async function sendDmMessage(){
+  const body = $("dmReplyBody").value.trim();
+  if (!body || !curConvo) return;
+  const btn = $("dmReplySend"); btn.disabled = true;
+  try{
+    await api("/dm/" + curConvo.conversation.id + "/message", { method:"POST", body:{ body }});
+    $("dmReplyBody").value = "";
+    await refreshConversation(curConvo.conversation.id);
+  }catch(e){ flash(e.message, "err"); }
+  finally{ btn.disabled = false; }
+}
+// staff: add another participant to the open conversation. Type a name → search → if
+// several match, pick from a dropdown → confirm the add.
+async function addDmParticipant(){
+  if (!curConvo) return;
+  const cid = curConvo.conversation.id;
+  const r1 = await openModal({ title:"צירוף משתתף",
+    bodyHTML:`<p class="modal-msg">שם המשתתף לצירוף (כפי שמופיע בפורום):</p>` +
+             `<input class="in" data-field="name" placeholder="שם / כינוי…">`, okText:"חפש" });
+  if (!r1 || !r1.name || !r1.name.trim()) return;
+  let members = [];
+  try{ members = (await api(`/members?q=${encodeURIComponent(r1.name.trim())}`)).members; }
+  catch(e){ flash(e.message, "err"); return; }
+  members = members.filter(m => m.id !== me.id && !(curConvo.participants||[]).some(p => p.id === m.id));
+  if (!members.length){ flash("לא נמצא משתמש פנוי בשם זה.", "err"); return; }
+  let target = members[0];
+  if (members.length > 1){
+    const r2 = await openModal({ title:"צירוף משתתף",
+      bodyHTML:`<p class="modal-msg">נמצאו כמה משתמשים — בחר:</p>` +
+        `<select class="in" data-field="uid">${members.map(m => `<option value="${m.id}">${esc(m.display_name)}</option>`).join("")}</select>`,
+      okText:"צרף" });
+    if (!r2 || !r2.uid) return;
+    target = members.find(m => String(m.id) === String(r2.uid));
+  }
+  try{
+    await api("/dm/" + cid + "/participants", { method:"POST", body:{ user_id: target.id }});
+    await refreshConversation(cid);
+    flash(`${target.display_name} צורף/ה לשיחה.`, "ok");
+  }catch(e){ flash(e.message, "err"); }
+}
+// "reply privately" from a post — opens the DM window with the author pre-selected.
+async function startPmWith(uid, name, role){
+  if (!me){ openAuth(); return; }
+  if (location.hash !== "#dm") history.pushState(null, "", "#dm");
+  await openDm();
+  showNewDmForm({ id: uid, display_name: name, role: role || "member" });
+}
+function startDmPoll(id){
+  stopDmPoll();
+  dmPollTimer = setInterval(() => {
+    if ($("dmChatPane").classList.contains("hidden")){ stopDmPoll(); return; }
+    refreshConversation(id, true).catch(()=>{});
+  }, 6000);
+}
+function stopDmPoll(){ if (dmPollTimer){ clearInterval(dmPollTimer); dmPollTimer = null; } }
+
 // On the login redirect we land with #token=... (or #error=...) in the URL fragment.
 function consumeHash(){
   const h = location.hash;
@@ -2203,6 +2533,10 @@ function postHtml(o, byId){
   actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
   if (canPost() && !mine)
     actions += `<button class="btn btn-light btn-sm" data-act="report" data-id="${p.id}" title="דווח על תוכן לא ראוי">🚩</button>`;
+  // "reply privately" → opens a DM to the author. A member may only DM staff, so the button
+  // shows for a member ONLY when the author is staff; staff can privately reply to anyone.
+  if (canPost() && !mine && (atLeast("moderator") || RANK_ROLE(p.author_role) >= 2))
+    actions += `<button class="btn btn-light btn-sm" data-act="pm" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}" title="שלח הודעה פרטית למחבר">✉️ הגב בפרטי</button>`;
   if (canMarkSolution)
     actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
   if (canPinTopic)
@@ -2256,6 +2590,7 @@ function wirePostActions(){
     if (act === "reply") return setReplyTo(id);
     if (act === "quote") return quotePost(id);
     if (act === "report") return reportPost(id);
+    if (act === "pm") return startPmWith(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
     if (act === "gotopost") return jumpToPost(id);
     if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
@@ -2484,6 +2819,7 @@ function notifText(n){
     case "solution": return { ic:"✓",  html:`${who} סימן את התגובה שלך כפתרון ב־${topic}` };
     case "activity": return { ic:"📋", html:`פעילות חדשה: ${who} ב־${topic}` };
     case "support_dev": return { ic:"🛠️", html:`פנייה בתמיכה דורשת טיפול${n.ticket_title?`: ״${esc(n.ticket_title)}״`:""} (מאת ${who})` };
+    case "dm":       return { ic:"✉️", html:`${who} שלח לך הודעה פרטית${n.convo_subject?`: ״${esc(n.convo_subject)}״`:""}` };
     default:         return { ic:"🔔", html:`${who} · ${topic}` };
   }
 }
@@ -2492,7 +2828,7 @@ function renderNotifList(items){
   if (!items.length){ box.innerHTML = `<div class="empty">אין התראות עדיין.</div>`; return; }
   const row = (n) => {
     const tx = notifText(n);
-    return `<div class="notif ${n.is_read?'':'unread'}" data-id="${n.id}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}" data-ticket="${n.ticket_id||''}">
+    return `<div class="notif ${n.is_read?'':'unread'}" data-id="${n.id}" data-topic="${n.topic_id||''}" data-post="${n.post_id||''}" data-ticket="${n.ticket_id||''}" data-convo="${n.convo_id||''}">
       <span class="notif-ic">${tx.ic}</span>
       <span class="notif-tx">${tx.html}<div class="notif-when">${when(n.created_at)}</div></span>
     </div>`;
@@ -2508,6 +2844,7 @@ function renderNotifList(items){
   box.querySelectorAll(".notif").forEach(el => el.onclick = async () => {
     const tid = el.getAttribute("data-topic"), pid = el.getAttribute("data-post");
     const tkt = el.getAttribute("data-ticket"), nid = el.getAttribute("data-id");
+    const cvo = el.getAttribute("data-convo");
     // support escalation → mark THIS notice read, then open the ticket in the support window
     if (tkt){
       try{ const r = await api("/notifications/read", { method:"POST", body:{ id: parseInt(nid,10) } }); setBell(r.unread); }catch{}
@@ -2515,6 +2852,15 @@ function renderNotifList(items){
       if (location.hash !== "#support") history.pushState(null, "", "#support");
       await openSupport();
       openTicket(parseInt(tkt,10));
+      return;
+    }
+    // private message → clear this conversation's notices, open the DM window on it
+    if (cvo){
+      try{ const r = await api("/notifications/read", { method:"POST", body:{ convo_id: parseInt(cvo,10) } }); setBell(r.unread); }catch{}
+      closeNotifications();
+      if (location.hash !== "#dm") history.pushState(null, "", "#dm");
+      await openDm();
+      openConversation(parseInt(cvo,10));
       return;
     }
     // visiting a thread clears ONLY that thread's notifications (not every unread one)
@@ -3242,6 +3588,10 @@ function routeFromHash(){
     if ($("supportOverlay").classList.contains("hidden")) openSupport();
     return;
   }
+  if (location.hash === "#dm"){
+    if ($("dmOverlay").classList.contains("hidden")) openDm();
+    return;
+  }
   // list route: "#cat=<id>" filters by a category; anything else (incl. empty) = all.
   const mc = location.hash.match(/^#cat=(\d+)/);
   const wantCat = mc ? parseInt(mc[1], 10) : null;
@@ -3429,6 +3779,38 @@ $("ntLogBtn").onclick = () => $("ntLogInput").click();
 $("ntLogInput").onchange = () => uploadTicketLog($("ntLogInput").files[0]);
 $("ticketBack").onclick = backToTicketList;
 $("ticketReplyForm").onsubmit = (e) => { e.preventDefault(); sendTicketMessage(); };
+// private-messages (DM) modal
+$("dmBtn").onclick = goDm;
+$("dmClose").onclick = closeDm;
+$("dmChatClose").onclick = closeDm;
+$("dmOverlay").onclick = (e) => { if (e.target === $("dmOverlay")) closeDm(); };
+$("newDmBtn").onclick = () => showNewDmForm();
+$("dmCancel").onclick = hideNewDmForm;
+$("newDmForm").onsubmit = (e) => { e.preventDefault(); submitNewDm(); };
+$("dmChatBack").onclick = backToConvoList;
+$("dmReplyForm").onsubmit = (e) => { e.preventDefault(); sendDmMessage(); };
+$("dmAddBtn").onclick = addDmParticipant;
+$("dmOversightBtn").onclick = async () => {
+  dmOversight = !dmOversight;
+  $("dmOversightBtn").textContent = dmOversight ? "👤 השיחות שלי" : "🔎 כל השיחות";
+  hideNewDmForm();
+  await loadConversations();
+};
+// recipient typeahead for the new-conversation picker (debounced; server filters staff for members)
+$("dmToInput").oninput = () => {
+  const q = $("dmToInput").value.trim();
+  clearTimeout(dmToTimer);
+  if (!q){ $("dmToPop").classList.add("hidden"); return; }
+  dmToTimer = setTimeout(() => dmRecipientSearch(q), 180);
+};
+$("dmToInput").onkeydown = (e) => {
+  if (e.key === "Backspace" && !$("dmToInput").value && dmToSel.length){ dmToSel.pop(); renderDmChips(); }
+  else if (e.key === "Escape"){ $("dmToPop").classList.add("hidden"); }
+};
+document.addEventListener("click", (e) => {   // dismiss the recipient dropdown on outside click
+  if (!$("dmToPop").classList.contains("hidden") && !$("dmToPicker").contains(e.target) && !$("dmToPop").contains(e.target))
+    $("dmToPop").classList.add("hidden");
+});
 // edit-post modal
 $("editSave").onclick = saveEdit;
 $("editCancel").onclick = closeEdit;
@@ -3461,6 +3843,7 @@ async function refreshOpenTopicPosts(){
 // reply draft in progress. (refreshBell/refreshReqBadge self-guard on sign-in/role.)
 async function autoRefresh(){
   refreshBell();
+  refreshDmBadge();
   refreshReqBadge();
   refreshReportBadge();
   if (document.querySelector(".modal-overlay:not(.hidden)")) return;
@@ -3497,6 +3880,7 @@ setInterval(() => { if (!document.hidden) autoRefresh(); }, 30000);
     me = boot.user || null;
     renderAuth();
     setBell(boot.unread_notifications || 0);   // seed the bell from the first round-trip
+    setDmBadge(boot.unread_dm || 0);           // seed the private-message inbox badge too
     // Google first-timers (no join form yet) are prompted immediately.
     if (me && me.status === "incomplete") openJoin();
     await loadCategories(boot.categories);
