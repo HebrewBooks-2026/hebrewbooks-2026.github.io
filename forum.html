@@ -486,6 +486,50 @@
   .agree-row input{margin-top:3px;flex:0 0 auto;width:16px;height:16px;accent-color:var(--gold)}
   .compose-policy{font-size:.8rem;color:#6b531a;background:#fbf3df;border:1px solid var(--gold-soft);
     border-radius:9px;padding:8px 11px;line-height:1.5}
+  /* ===== support (AI bug-report) ===== */
+  .support-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+  .support-head h2{margin:0}
+  .support-intro{font-size:.86rem;color:var(--muted);line-height:1.5;margin:0 2px 12px}
+  .support-blocked-note{background:#fbeeeb;border:1px solid #e6bcae;color:var(--danger);
+    border-radius:9px;padding:9px 12px;font-size:.88rem;font-weight:600;margin-bottom:12px}
+  .support-newform{display:flex;flex-direction:column;gap:12px;background:var(--parch);
+    border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .support-log-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .support-logname{font-size:.84rem;color:var(--indigo);font-weight:600}
+  .support-loghint{font-size:.78rem;color:var(--muted);line-height:1.45;direction:rtl}
+  /* ticket list rows */
+  .ticket-row{display:flex;align-items:flex-start;gap:10px;padding:12px 8px;border-bottom:1px solid var(--line);
+    cursor:pointer;border-radius:9px}
+  .ticket-row:hover{background:var(--parch)}
+  .ticket-row:last-child{border-bottom:0}
+  .ticket-main{flex:1 1 auto;min-width:0}
+  .ticket-title{font-weight:800;overflow:hidden;text-overflow:ellipsis}
+  .ticket-snippet{color:var(--muted);font-size:.84rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ticket-when{color:var(--muted);font-size:.76rem;margin-top:3px}
+  .ticket-author{color:var(--indigo);font-weight:700}
+  /* status badge */
+  .support-badge{display:inline-block;font-size:.74rem;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .support-badge.st-open{background:#eef2fb;color:var(--indigo)}
+  .support-badge.st-awaiting_user{background:#fbf3df;color:#6b531a}
+  .support-badge.st-needs_dev{background:#fdeede;color:#a5600f}
+  .support-badge.st-resolved{background:#e6f6ea;color:#1f7a37}
+  /* chat pane */
+  .support-chat-head{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .support-chat-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .support-chat-title h2{margin:0;font-size:1.15rem}
+  .support-loglink{font-size:.84rem;color:var(--indigo);font-weight:700;text-decoration:none}
+  .support-loglink:hover{text-decoration:underline}
+  .support-msgs{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px}
+  .s-msg{max-width:86%;padding:9px 12px;border-radius:13px;line-height:1.55;font-size:.92rem;word-break:break-word}
+  .s-msg .s-who{font-size:.72rem;font-weight:800;opacity:.7;margin-bottom:3px}
+  .s-msg .s-when{font-size:.7rem;color:var(--muted);margin-top:4px}
+  .s-user{align-self:flex-start;background:#eef2fb;border:1px solid #d6e0f5}
+  .s-assistant{align-self:flex-end;background:#fbf7ec;border:1px solid var(--gold-soft)}
+  .s-dev{align-self:flex-end;background:#e6f6ea;border:1px solid #b6e0c2}
+  .s-system{align-self:center;background:#f4f4f4;border:1px dashed var(--line);color:#555;font-size:.84rem;max-width:94%}
+  .support-reply{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+  .support-reply textarea{min-height:64px}
+  .support-thinking{align-self:center;color:var(--muted);font-size:.82rem;padding:4px}
 </style>
 </head>
 <body>
@@ -496,6 +540,7 @@
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
         <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
+        <button id="supportBtn" class="bell" type="button" title="תמיכה ודיווח באגים בתוכנה" aria-label="תמיכה">🛠️</button>
         <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
@@ -769,6 +814,69 @@
   </div>
 </div>
 
+<!-- support: AI-assisted bug reporting (log analysis). Two panes inside one modal:
+     the ticket list, and a single ticket's chat. -->
+<div id="supportOverlay" class="modal-overlay hidden">
+  <div class="modal support-modal" role="dialog" aria-modal="true" style="max-width:720px">
+
+    <!-- ===== list pane ===== -->
+    <div id="supportListPane">
+      <div class="support-head">
+        <h2>🛠️ תמיכה ודיווח באגים</h2>
+        <button id="newTicketBtn" class="btn btn-gold btn-sm" type="button">+ פנייה חדשה</button>
+      </div>
+      <p class="support-intro">מערכת התמיכה מיועדת אך ורק לדיווח על <b>באגים ותקלות בתוכנה</b>. עוזר חכם ינתח את הפנייה (ואת קובץ הלוג אם תצרף), ינסה לעזור, ורק תקלה שדורשת תיקון תועבר למפתח.</p>
+      <div id="supportBlockedNote" class="support-blocked-note hidden">🚫 הגישה שלך למערכת התמיכה נחסמה. לנושאים אחרים תוכל להשתמש בפורום הרגיל.</div>
+
+      <!-- new-ticket form (collapsed by default) -->
+      <form id="newTicketForm" class="support-newform hidden">
+        <div>
+          <label class="fld">כותרת</label>
+          <input id="ntTitle" class="in" maxlength="300" placeholder="תיאור קצר של התקלה" required>
+        </div>
+        <div>
+          <label class="fld">תיאור הבעיה</label>
+          <textarea id="ntBody" class="in" placeholder="מה ניסית לעשות? מה קרה? מה ציפית שיקרה?" required></textarea>
+        </div>
+        <div class="support-log-row">
+          <button id="ntLogBtn" class="btn btn-light btn-sm" type="button">📄 צרף קובץ לוג</button>
+          <span id="ntLogName" class="support-logname"></span>
+          <input id="ntLogInput" type="file" accept=".log,.txt,text/plain" class="hidden">
+        </div>
+        <div class="support-loghint">הלוג עוזר לאבחון. נמצא ב־%AppData%\HebrewBooks\logs (כפתור «העתק נתיב לוגים» קיים גם בבדיקת התקינות שבתוכנה).</div>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit" id="ntSubmit">שלח פנייה</button>
+          <button class="btn btn-light" type="button" id="ntCancel">ביטול</button>
+        </div>
+      </form>
+
+      <div id="supportTickets" class="modal-body" style="max-height:55vh;overflow:auto"></div>
+      <div class="modal-actions"><button id="supportClose" class="btn btn-light" type="button">סגור</button></div>
+    </div>
+
+    <!-- ===== chat pane ===== -->
+    <div id="supportChatPane" class="hidden">
+      <div class="support-chat-head">
+        <span class="back" id="ticketBack">→ חזרה לפניות</span>
+        <div class="support-chat-title">
+          <h2 id="ticketTitle"></h2>
+          <span id="ticketStatus" class="support-badge"></span>
+        </div>
+        <a id="ticketLogLink" class="support-loglink hidden" href="#" target="_blank" rel="noopener">📄 צפה בלוג</a>
+      </div>
+      <div id="ticketMessages" class="support-msgs"></div>
+      <form id="ticketReplyForm" class="support-reply">
+        <textarea id="ticketReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
+        <div class="row-actions">
+          <button class="btn btn-gold" type="submit" id="ticketSend">שלח</button>
+          <button class="btn btn-light" type="button" id="ticketCloseChat">סגור</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
 <script>
 // ====== config ======
 const API = "https://hebrewbooks-forum-api.hebrewbooks.workers.dev";
@@ -791,6 +899,12 @@ let listFilter = "";      // ""(all) | unanswered | unsolved  (server-side topic
 let allUsers = [];        // admin user-management cache (filtered client-side)
 let searchQuery = "";     // topic search term (matched server-side on title + posts)
 let searchTimer = null;   // debounce handle for the search box
+// support (AI bug-report) state
+let supportTickets = [];  // cached ticket list (mine, or all for staff)
+let curTicket = null;     // the open ticket object (chat pane)
+let ntLogKey = null, ntLogFileName = null;  // staged log upload for a new ticket
+let supportPollTimer = null;                // polls an open ticket for the async code analysis
+let supportSig = "";                        // last-rendered chat signature (skip idle re-renders)
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -1340,14 +1454,17 @@ function renderUsers(){
     }
     if (!self)
       actions += `<button class="btn btn-light btn-sm" data-block="${u.id}" data-blocked="${u.is_blocked?1:0}">${u.is_blocked?"בטל חסימה":"חסום"}</button>`;
+    if (!self)
+      actions += `<button class="btn btn-light btn-sm" data-supblock="${u.id}" data-sb="${u.support_blocked?1:0}">${u.support_blocked?"בטל חסימת AI":"חסום AI"}</button>`;
     const blockedTag = u.is_blocked ? ` <span class="role-tag" style="background:#fbeeeb;color:var(--danger)">חסום</span>` : "";
+    const supTag = u.support_blocked ? ` <span class="role-tag" style="background:#fdeede;color:#a5600f">AI חסום</span>` : "";
     return `<tr>
       <td><div class="u-name">${esc(u.display_name)}${self?' <span class="u-sub">(אתה)</span>':''}</div>
           <div class="u-sub">${esc(u.full_name||"")}</div></td>
       <td class="u-sub">${esc(u.email)}</td>
       <td class="u-sub">${u.created_at ? whenDate(u.created_at) : ""}</td>
       <td>${u.post_count ?? 0}</td>
-      <td>${STATUS_LABEL[u.status]||esc(u.status)}${blockedTag}</td>
+      <td>${STATUS_LABEL[u.status]||esc(u.status)}${blockedTag}${supTag}</td>
       <td><div class="u-acts">${roleSel}${actions}</div></td>
     </tr>`;
   }).join("");
@@ -1356,6 +1473,7 @@ function renderUsers(){
     `<tbody>${rows}</tbody></table>`;
   $("usersList").querySelectorAll(".usr-role").forEach(sel => sel.onchange = () => changeRole(sel.dataset.id, sel.value));
   $("usersList").querySelectorAll("[data-block]").forEach(el => el.onclick = () => toggleBlock(el.dataset.block, el.dataset.blocked === "0"));
+  $("usersList").querySelectorAll("[data-supblock]").forEach(el => el.onclick = () => toggleSupportBlock(el.dataset.supblock, el.dataset.sb === "0"));
   $("usersList").querySelectorAll("[data-approve]").forEach(el => el.onclick = () => decideUser(el.dataset.approve, true));
   $("usersList").querySelectorAll("[data-reject]").forEach(el => el.onclick = () => decideUser(el.dataset.reject, false));
 }
@@ -1373,6 +1491,158 @@ async function decideUser(id, approve){
   if (!approve){ body = await promptRejectReason(); if (body === null) return; }
   try{ await api(`/users/${id}/${approve?"approve":"reject"}`, { method:"POST", body }); flash(approve?"אושר.":"נדחה.", "ok"); reloadUsers(); refreshReqBadge(); }
   catch(e){ flash(e.message, "err"); }
+}
+// Admin: block/unblock a user's AI-support access from the management panel.
+async function toggleSupportBlock(id, blocked){
+  try{ await api(`/users/${id}/support`, { method:"PATCH", body:{ blocked }}); flash(blocked?"גישת ה-AI נחסמה.":"חסימת ה-AI בוטלה.", "ok"); reloadUsers(); }
+  catch(e){ flash(e.message, "err"); }
+}
+
+// ====== support: AI-assisted bug reporting ======
+const SUPPORT_STATUS_LABEL = { open:"בטיפול", awaiting_user:"ממתין לך", needs_dev:"הועבר למפתח", resolved:"טופל" };
+
+async function openSupport(){
+  if (!me){ openAuth(); return; }
+  $("supportOverlay").classList.remove("hidden");
+  backToTicketList();
+  $("supportBlockedNote").classList.toggle("hidden", !me.support_blocked);
+  $("newTicketBtn").classList.toggle("hidden", !!me.support_blocked);
+  await loadSupportTickets();
+}
+function closeSupport(){ $("supportOverlay").classList.add("hidden"); stopTicketPoll(); }
+
+async function loadSupportTickets(){
+  const box = $("supportTickets");
+  box.innerHTML = `<div class="empty">טוען…</div>`;
+  try{ supportTickets = (await api("/support")).tickets; }
+  catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderSupportTickets();
+}
+function renderSupportTickets(){
+  const box = $("supportTickets");
+  if (!supportTickets.length){ box.innerHTML = `<div class="empty">אין עדיין פניות. פתח פנייה חדשה כדי לדווח על תקלה.</div>`; return; }
+  const staff = atLeast("moderator");
+  box.innerHTML = supportTickets.map(t => `
+    <div class="ticket-row" data-id="${t.id}">
+      <span class="support-badge st-${esc(t.status)}">${esc(SUPPORT_STATUS_LABEL[t.status]||t.status)}</span>
+      <div class="ticket-main">
+        <div class="ticket-title">${esc(t.title)}</div>
+        ${t.snippet?`<div class="ticket-snippet">${esc(t.snippet)}</div>`:""}
+        <div class="ticket-when">${staff&&t.author?`<span class="ticket-author">${esc(t.author)}</span> · `:""}${when(t.updated_at)}${t.log_name?" · 📄 לוג":""}</div>
+      </div>
+    </div>`).join("");
+  box.querySelectorAll(".ticket-row").forEach(el => el.onclick = () => openTicket(parseInt(el.dataset.id,10)));
+}
+
+function showNewTicketForm(){ resetNewTicketForm(); $("newTicketForm").classList.remove("hidden"); $("ntTitle").focus(); }
+function hideNewTicketForm(){ $("newTicketForm").classList.add("hidden"); }
+function resetNewTicketForm(){
+  $("ntTitle").value = ""; $("ntBody").value = "";
+  ntLogKey = null; ntLogFileName = null; $("ntLogName").textContent = "";
+}
+async function uploadTicketLog(file){
+  if (!file) return;
+  $("ntLogName").textContent = "מעלה…";
+  const fd = new FormData(); fd.append("log", file);
+  try{
+    const res = await fetch(API + "/support/upload-log", { method:"POST", headers:{ Authorization:"Bearer "+token }, body:fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+    ntLogKey = data.key; ntLogFileName = data.name;
+    $("ntLogName").textContent = "✓ " + data.name;
+  }catch(e){ ntLogKey=null; ntLogFileName=null; $("ntLogName").textContent=""; flash(e.message, "err"); }
+}
+async function submitNewTicket(){
+  const title = $("ntTitle").value.trim(), body = $("ntBody").value.trim();
+  if (!title || !body){ flash("נא למלא כותרת ותיאור.", "err"); return; }
+  const btn = $("ntSubmit"); btn.disabled = true;
+  try{
+    const r = await api("/support", { method:"POST", body:{ title, body, log_key: ntLogKey, log_name: ntLogFileName }});
+    if (r.support_blocked) me.support_blocked = true;
+    hideNewTicketForm();
+    await loadSupportTickets();
+    openTicket(r.ticket_id);
+  }catch(e){ flash(e.message, "err"); }
+  finally{ btn.disabled = false; }
+}
+
+async function openTicket(id){
+  stopTicketPoll();
+  $("supportListPane").classList.add("hidden");
+  $("supportChatPane").classList.remove("hidden");
+  $("ticketMessages").innerHTML = `<div class="empty">טוען…</div>`;
+  supportSig = "";
+  try{ await refreshTicket(id); }
+  catch(e){ $("ticketMessages").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  startTicketPoll(id);
+}
+// silent=true skips re-render when nothing changed (the 6s poll for the async code analysis).
+async function refreshTicket(id, silent){
+  const data = await api("/support/" + id);
+  curTicket = data.ticket;
+  const sig = data.messages.map(m => m.id).join(",") + "|" + data.ticket.status;
+  if (silent && sig === supportSig) return;
+  supportSig = sig;
+  renderTicketChat(data.ticket, data.messages);
+}
+function renderTicketChat(ticket, messages){
+  $("ticketTitle").textContent = ticket.title;
+  $("ticketStatus").className = "support-badge st-" + ticket.status;
+  $("ticketStatus").textContent = SUPPORT_STATUS_LABEL[ticket.status] || ticket.status;
+  const logLink = $("ticketLogLink");
+  logLink.classList.toggle("hidden", !ticket.has_log);
+  logLink.onclick = (e) => { e.preventDefault(); viewTicketLog(ticket.id); };
+  const who = { user: ticket.author ? esc(ticket.author) : "אני", assistant: "עוזר תמיכה 🤖", dev: "מפתח 🛠️", system: "מערכת" };
+  const box = $("ticketMessages");
+  box.innerHTML = messages.map(m => `
+    <div class="s-msg s-${esc(m.role)}">
+      <div class="s-who">${who[m.role]||esc(m.role)}</div>
+      <div>${renderBody(m.body)}</div>
+      <div class="s-when">${when(m.created_at)}</div>
+    </div>`).join("") +
+    (ticket.status === "needs_dev" ? `<div class="support-thinking">🛠️ הפנייה הועברה למפתח — עדכון יופיע כאן כשתהיה התקדמות.</div>` : "");
+  box.scrollTop = box.scrollHeight;
+  // owner blocked → no composer; staff can always reply.
+  const canReply = atLeast("moderator") || !me.support_blocked;
+  $("ticketReplyForm").classList.toggle("hidden", !canReply);
+}
+async function sendTicketMessage(){
+  const body = $("ticketReplyBody").value.trim();
+  if (!body || !curTicket) return;
+  const btn = $("ticketSend"); btn.disabled = true;
+  try{
+    const r = await api("/support/" + curTicket.id + "/message", { method:"POST", body:{ body }});
+    if (r.support_blocked) me.support_blocked = true;
+    $("ticketReplyBody").value = "";
+    await refreshTicket(curTicket.id);
+    if (me.support_blocked) $("ticketReplyForm").classList.add("hidden");
+  }catch(e){ flash(e.message, "err"); }
+  finally{ btn.disabled = false; }
+}
+// The log endpoint needs the Bearer header, so fetch as a blob and open it.
+async function viewTicketLog(id){
+  try{
+    const res = await fetch(API + "/support/" + id + "/log", { headers:{ Authorization:"Bearer "+token }});
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const url = URL.createObjectURL(await res.blob());
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }catch(e){ flash("טעינת הלוג נכשלה: " + e.message, "err"); }
+}
+function startTicketPoll(id){
+  stopTicketPoll();
+  supportPollTimer = setInterval(() => {
+    if ($("supportChatPane").classList.contains("hidden")){ stopTicketPoll(); return; }
+    refreshTicket(id, true).catch(()=>{});
+  }, 6000);
+}
+function stopTicketPoll(){ if (supportPollTimer){ clearInterval(supportPollTimer); supportPollTimer = null; } }
+function backToTicketList(){
+  stopTicketPoll();
+  $("supportChatPane").classList.add("hidden");
+  $("supportListPane").classList.remove("hidden");
+  hideNewTicketForm();
+  curTicket = null;
 }
 
 // On the login redirect we land with #token=... (or #error=...) in the URL fragment.
@@ -3059,6 +3329,18 @@ $("reportsOverlay").onclick = (e) => { if (e.target === $("reportsOverlay")) clo
 // admin users modal
 $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
+// support (AI bug-report) modal
+$("supportBtn").onclick = openSupport;
+$("supportClose").onclick = closeSupport;
+$("ticketCloseChat").onclick = closeSupport;
+$("supportOverlay").onclick = (e) => { if (e.target === $("supportOverlay")) closeSupport(); };
+$("newTicketBtn").onclick = showNewTicketForm;
+$("ntCancel").onclick = hideNewTicketForm;
+$("newTicketForm").onsubmit = (e) => { e.preventDefault(); submitNewTicket(); };
+$("ntLogBtn").onclick = () => $("ntLogInput").click();
+$("ntLogInput").onchange = () => uploadTicketLog($("ntLogInput").files[0]);
+$("ticketBack").onclick = backToTicketList;
+$("ticketReplyForm").onsubmit = (e) => { e.preventDefault(); sendTicketMessage(); };
 // edit-post modal
 $("editSave").onclick = saveEdit;
 $("editCancel").onclick = closeEdit;
