@@ -848,9 +848,9 @@
           <textarea id="ntBody" class="in" placeholder="מה ניסית לעשות? מה קרה? מה ציפית שיקרה?" required></textarea>
         </div>
         <div class="support-log-row">
-          <button id="ntLogBtn" class="btn btn-light btn-sm" type="button">📄 צרף קובץ לוג</button>
+          <button id="ntLogBtn" class="btn btn-light btn-sm" type="button">📄 צרף לוג / ZIP</button>
           <span id="ntLogName" class="support-logname"></span>
-          <input id="ntLogInput" type="file" accept=".log,.txt,text/plain" class="hidden">
+          <input id="ntLogInput" type="file" accept=".log,.txt,.zip,text/plain,application/zip" class="hidden">
         </div>
         <details class="support-loghelp">
           <summary>❓ איך מפיקים ומצרפים קובץ לוג?</summary>
@@ -860,10 +860,11 @@
               <div class="logpath-row"><code>%AppData%\HebrewBooks\logs</code>
                 <button type="button" id="copyLogPathBtn" class="btn btn-light btn-sm">📋 העתק נתיב</button></div>
             </li>
-            <li>בחר את הקובץ <b>העדכני ביותר</b>, בשם <code>bookshelf-&lt;תאריך&gt;.log</code>.</li>
-            <li>חזור לכאן, לחץ «📄 צרף קובץ לוג» ובחר אותו.</li>
+            <li>בחר את הקובץ <b>העדכני ביותר</b>, בשם <code>bookshelf-&lt;תאריך&gt;.log</code>.
+              <br>או פשוט <b>כווץ ל-ZIP את כל התיקייה</b> (קליק ימני → «שלח אל» → «תיקייה מכווצת») — ייקראו כל קבצי הטקסט שבתוכו.</li>
+            <li>חזור לכאן, לחץ «📄 צרף לוג / ZIP» ובחר את הקובץ.</li>
           </ol>
-          <div class="support-loghint">אין חובה לצרף לוג, אבל הוא מזרז מאוד את האבחון. הלוג נוצר אוטומטית בכל הפעלה של התוכנה.</div>
+          <div class="support-loghint">אין חובה לצרף לוג, אבל הוא מזרז מאוד את האבחון. הלוג נוצר אוטומטית בכל הפעלה של התוכנה. מ-ZIP נקראים רק קבצי טקסט — קבצים בינאריים מדולגים.</div>
         </details>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="ntSubmit">שלח פנייה</button>
