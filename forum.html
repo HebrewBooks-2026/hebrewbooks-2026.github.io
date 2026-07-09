@@ -536,6 +536,24 @@
   .support-reply{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
   .support-reply textarea{min-height:64px}
   .support-thinking{align-self:center;color:var(--muted);font-size:.82rem;padding:4px}
+  /* floating "report a bug" bubble (FAB) */
+  .support-fab{position:fixed;bottom:22px;right:22px;z-index:45;width:60px;height:60px;border-radius:50%;
+    background:var(--gold);color:#3a2c07;border:none;cursor:pointer;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 20px rgba(180,140,30,.5);transition:transform .14s,box-shadow .2s}
+  .support-fab .fab-ic{font-size:1.7rem;line-height:1;position:relative;z-index:1}
+  .support-fab:hover{transform:translateY(-2px) scale(1.06);box-shadow:0 10px 30px rgba(180,140,30,.62)}
+  .support-fab:active{transform:translateY(0) scale(.98)}
+  .support-fab::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    animation:fabPulse 2.4s ease-out infinite}
+  @keyframes fabPulse{0%{box-shadow:0 0 0 0 rgba(212,170,60,.55)}70%{box-shadow:0 0 0 18px rgba(212,170,60,0)}100%{box-shadow:0 0 0 0 rgba(212,170,60,0)}}
+  .support-fab .fab-tip{position:absolute;right:calc(100% + 12px);top:50%;transform:translateY(-50%) translateX(8px);
+    background:#28324a;color:#fff;padding:8px 13px;border-radius:10px;white-space:nowrap;
+    font-size:.86rem;font-weight:700;opacity:0;pointer-events:none;
+    box-shadow:0 4px 16px rgba(0,0,0,.22);transition:opacity .2s,transform .2s}
+  .support-fab:hover .fab-tip{opacity:1;transform:translateY(-50%) translateX(0)}
+  @media (max-width:640px){ .support-fab{width:54px;height:54px;bottom:16px;right:16px} .support-fab .fab-tip{display:none} }
+  @media (prefers-reduced-motion:reduce){ .support-fab::after{animation:none} }
 </style>
 </head>
 <body>
@@ -898,6 +916,12 @@
 
   </div>
 </div>
+
+<!-- floating "report a bug" bubble — the prominent, always-visible invite into support -->
+<button id="supportFab" class="support-fab" type="button" aria-label="תמיכה ודיווח באגים" title="נתקלת בבאג? דברו איתנו">
+  <span class="fab-ic">🛠️</span>
+  <span class="fab-tip">נתקלת בבאג? דברו איתנו</span>
+</button>
 
 <script>
 // ====== config ======
@@ -1532,6 +1556,7 @@ function goSupport(){
 async function openSupport(){
   if (!me){ openAuth(); return; }
   $("supportOverlay").classList.remove("hidden");
+  $("supportFab").classList.add("hidden");   // no pulsing bubble behind the open window
   backToTicketList();
   $("supportBlockedNote").classList.toggle("hidden", !me.support_blocked);
   $("newTicketBtn").classList.toggle("hidden", !!me.support_blocked);
@@ -1539,6 +1564,7 @@ async function openSupport(){
 }
 function closeSupport(){
   $("supportOverlay").classList.add("hidden");
+  $("supportFab").classList.remove("hidden");
   stopTicketPoll();
   if (location.hash === "#support") history.replaceState(null, "", location.pathname + location.search);
 }
@@ -3378,6 +3404,7 @@ $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
 // support (AI bug-report) modal
 $("supportBtn").onclick = goSupport;
+$("supportFab").onclick = goSupport;
 $("supportClose").onclick = closeSupport;
 $("ticketCloseChat").onclick = closeSupport;
 $("supportOverlay").onclick = (e) => { if (e.target === $("supportOverlay")) closeSupport(); };
