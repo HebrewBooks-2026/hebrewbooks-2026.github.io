@@ -494,9 +494,15 @@
     border-radius:9px;padding:9px 12px;font-size:.88rem;font-weight:600;margin-bottom:12px}
   .support-newform{display:flex;flex-direction:column;gap:12px;background:var(--parch);
     border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .support-head-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .support-log-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .support-logname{font-size:.84rem;color:var(--indigo);font-weight:600}
   .support-loghint{font-size:.78rem;color:var(--muted);line-height:1.45;direction:rtl}
+  .support-loghelp{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:.86rem}
+  .support-loghelp summary{cursor:pointer;font-weight:800;color:var(--indigo);user-select:none}
+  .support-loghelp ol{margin:9px 0 6px;padding-inline-start:20px;line-height:1.75}
+  .support-loghelp code{background:var(--parch);padding:2px 6px;border-radius:5px;direction:ltr;display:inline-block;font-size:.85em}
+  .logpath-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px}
   /* ticket list rows */
   .ticket-row{display:flex;align-items:flex-start;gap:10px;padding:12px 8px;border-bottom:1px solid var(--line);
     cursor:pointer;border-radius:9px}
@@ -823,7 +829,10 @@
     <div id="supportListPane">
       <div class="support-head">
         <h2>🛠️ תמיכה ודיווח באגים</h2>
-        <button id="newTicketBtn" class="btn btn-gold btn-sm" type="button">+ פנייה חדשה</button>
+        <div class="support-head-btns">
+          <button id="supportLinkBtn" class="btn btn-light btn-sm" type="button" title="העתק קישור ישיר לחלון התמיכה">🔗 קישור</button>
+          <button id="newTicketBtn" class="btn btn-gold btn-sm" type="button">+ פנייה חדשה</button>
+        </div>
       </div>
       <p class="support-intro">מערכת התמיכה מיועדת אך ורק לדיווח על <b>באגים ותקלות בתוכנה</b>. עוזר חכם ינתח את הפנייה (ואת קובץ הלוג אם תצרף), ינסה לעזור, ורק תקלה שדורשת תיקון תועבר למפתח.</p>
       <div id="supportBlockedNote" class="support-blocked-note hidden">🚫 הגישה שלך למערכת התמיכה נחסמה. לנושאים אחרים תוכל להשתמש בפורום הרגיל.</div>
@@ -843,7 +852,19 @@
           <span id="ntLogName" class="support-logname"></span>
           <input id="ntLogInput" type="file" accept=".log,.txt,text/plain" class="hidden">
         </div>
-        <div class="support-loghint">הלוג עוזר לאבחון. נמצא ב־%AppData%\HebrewBooks\logs (כפתור «העתק נתיב לוגים» קיים גם בבדיקת התקינות שבתוכנה).</div>
+        <details class="support-loghelp">
+          <summary>❓ איך מפיקים ומצרפים קובץ לוג?</summary>
+          <ol>
+            <li><b>שחזר את התקלה</b> בתוכנה — כדי שהיא תירשם ביומן.</li>
+            <li>פתח את תיקיית היומנים: הקש <b>Win+R</b>, הדבק את הנתיב, והקש Enter:
+              <div class="logpath-row"><code>%AppData%\HebrewBooks\logs</code>
+                <button type="button" id="copyLogPathBtn" class="btn btn-light btn-sm">📋 העתק נתיב</button></div>
+            </li>
+            <li>בחר את הקובץ <b>העדכני ביותר</b>, בשם <code>bookshelf-&lt;תאריך&gt;.log</code>.</li>
+            <li>חזור לכאן, לחץ «📄 צרף קובץ לוג» ובחר אותו.</li>
+          </ol>
+          <div class="support-loghint">אין חובה לצרף לוג, אבל הוא מזרז מאוד את האבחון. הלוג נוצר אוטומטית בכל הפעלה של התוכנה.</div>
+        </details>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="ntSubmit">שלח פנייה</button>
           <button class="btn btn-light" type="button" id="ntCancel">ביטול</button>
@@ -1501,6 +1522,12 @@ async function toggleSupportBlock(id, blocked){
 // ====== support: AI-assisted bug reporting ======
 const SUPPORT_STATUS_LABEL = { open:"בטיפול", awaiting_user:"ממתין לך", needs_dev:"הועבר למפתח", resolved:"טופל" };
 
+// Navigate to the support window via the URL hash, so #support is a shareable deep link
+// (forum.html#support opens this window directly — from the app, the site, anywhere).
+function goSupport(){
+  if (location.hash !== "#support") history.pushState(null, "", "#support");
+  openSupport();
+}
 async function openSupport(){
   if (!me){ openAuth(); return; }
   $("supportOverlay").classList.remove("hidden");
@@ -1509,7 +1536,11 @@ async function openSupport(){
   $("newTicketBtn").classList.toggle("hidden", !!me.support_blocked);
   await loadSupportTickets();
 }
-function closeSupport(){ $("supportOverlay").classList.add("hidden"); stopTicketPoll(); }
+function closeSupport(){
+  $("supportOverlay").classList.add("hidden");
+  stopTicketPoll();
+  if (location.hash === "#support") history.replaceState(null, "", location.pathname + location.search);
+}
 
 async function loadSupportTickets(){
   const box = $("supportTickets");
@@ -3166,6 +3197,10 @@ function routeFromHash(){
     if ($("viewActivity").classList.contains("hidden")) showActivity();
     return;
   }
+  if (location.hash === "#support"){
+    if ($("supportOverlay").classList.contains("hidden")) openSupport();
+    return;
+  }
   // list route: "#cat=<id>" filters by a category; anything else (incl. empty) = all.
   const mc = location.hash.match(/^#cat=(\d+)/);
   const wantCat = mc ? parseInt(mc[1], 10) : null;
@@ -3330,10 +3365,22 @@ $("reportsOverlay").onclick = (e) => { if (e.target === $("reportsOverlay")) clo
 $("usersClose").onclick = closeUsers;
 $("usersOverlay").onclick = (e) => { if (e.target === $("usersOverlay")) closeUsers(); };
 // support (AI bug-report) modal
-$("supportBtn").onclick = openSupport;
+$("supportBtn").onclick = goSupport;
 $("supportClose").onclick = closeSupport;
 $("ticketCloseChat").onclick = closeSupport;
 $("supportOverlay").onclick = (e) => { if (e.target === $("supportOverlay")) closeSupport(); };
+$("supportLinkBtn").onclick = () => {
+  const url = location.origin + location.pathname + "#support";
+  navigator.clipboard.writeText(url)
+    .then(() => { flash("הקישור לחלון התמיכה הועתק.", "ok"); copiedFeedback($("supportLinkBtn")); })
+    .catch(() => openModal({ title:"קישור לחלון התמיכה",
+      bodyHTML:`<input class="in" value="${esc(url)}" readonly onclick="this.select()" style="direction:ltr">`, okText:"סגור" }));
+};
+$("copyLogPathBtn").onclick = () => {
+  navigator.clipboard.writeText("%AppData%\\HebrewBooks\\logs")
+    .then(() => { flash("הנתיב הועתק — הדבק ב-Win+R.", "ok"); copiedFeedback($("copyLogPathBtn")); })
+    .catch(() => flash("ההעתקה נכשלה — העתק ידנית.", "err"));
+};
 $("newTicketBtn").onclick = showNewTicketForm;
 $("ntCancel").onclick = hideNewTicketForm;
 $("newTicketForm").onsubmit = (e) => { e.preventDefault(); submitNewTicket(); };
