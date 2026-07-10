@@ -988,6 +988,7 @@
         </div>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="dmSend">שלח</button>
+          <button class="btn btn-light" type="button" id="dmLinkBtn">🔗 קישור</button>
           <button class="btn btn-light" type="button" id="dmCancel">ביטול</button>
         </div>
       </form>
@@ -1012,6 +1013,7 @@
         <textarea id="dmReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="dmReplySend">שלח</button>
+          <button class="btn btn-light" type="button" id="dmReplyLinkBtn">🔗 קישור</button>
           <button class="btn btn-light" type="button" id="dmChatClose">סגור</button>
         </div>
       </form>
@@ -1893,6 +1895,7 @@ function hideNewDmForm(){ $("newDmForm").classList.add("hidden"); $("dmToPop").c
 function resetNewDmForm(){
   dmToSel = []; renderDmChips();
   $("dmToInput").value = ""; $("dmSubject").value = ""; $("dmBody").value = "";
+  setMode($("dmBody"), "text");   // reset the rich-text editor to plain-text (also clears the live preview)
   $("dmToPop").classList.add("hidden");
 }
 function renderDmChips(){
@@ -1924,9 +1927,10 @@ async function dmRecipientSearch(q){
     addDmRecipient({ id:parseInt(el.dataset.id,10), display_name:el.dataset.name, role:el.dataset.role }));
 }
 async function submitNewDm(){
-  const body = $("dmBody").value.trim();
+  const ta = $("dmBody");
   if (!dmToSel.length){ flash("נא לבחור נמען.", "err"); return; }
-  if (!body){ flash("נא לכתוב הודעה.", "err"); return; }
+  if (!ta.value.trim()){ flash("נא לכתוב הודעה.", "err"); return; }
+  const body = composeBody(ta);   // HTML-mode messages get the marker prefix so renderBody sanitize-renders them
   const btn = $("dmSend"); btn.disabled = true;
   try{
     const r = await api("/dm", { method:"POST", body:{ to: dmToSel.map(u => u.id), subject: $("dmSubject").value.trim(), body }});
@@ -1981,12 +1985,13 @@ function renderConvoChat(data){
 // member=1, moderator=2, admin=3 — small client-side mirror for badge styling.
 function RANK_ROLE(r){ return r === "admin" ? 3 : r === "moderator" ? 2 : 1; }
 async function sendDmMessage(){
-  const body = $("dmReplyBody").value.trim();
-  if (!body || !curConvo) return;
+  const ta = $("dmReplyBody");
+  if (!ta.value.trim() || !curConvo) return;
+  const body = composeBody(ta);   // HTML-mode messages get the marker prefix so renderBody sanitize-renders them
   const btn = $("dmReplySend"); btn.disabled = true;
   try{
     await api("/dm/" + curConvo.conversation.id + "/message", { method:"POST", body:{ body }});
-    $("dmReplyBody").value = "";
+    ta.value = ""; setMode(ta, "text");   // clear + drop back to plain-text mode for the next message
     await refreshConversation(curConvo.conversation.id);
   }catch(e){ flash(e.message, "err"); }
   finally{ btn.disabled = false; }
@@ -3678,6 +3683,8 @@ $("editLinkBtn").onclick = () => insertLink($("editBody"));
 makeToolbar($("newBody"));
 makeToolbar($("replyBody"));
 makeToolbar($("editBody"));
+makeToolbar($("dmBody"));        // private-message compose (new conversation) gets the same rich editor
+makeToolbar($("dmReplyBody"));   // …and the private-message reply box
 // Re-check the clipboard when the user returns to the tab (e.g. after copying elsewhere).
 window.addEventListener("focus", refreshPasteBtns);
 
@@ -3700,6 +3707,8 @@ function ctrlEnterSubmit(ta, fn){
 ctrlEnterSubmit($("replyBody"), () => { if (curTopicId) submitReply(curTopicId); });
 ctrlEnterSubmit($("newBody"),  submitNewTopic);
 ctrlEnterSubmit($("editBody"), saveEdit);
+ctrlEnterSubmit($("dmBody"),      submitNewDm);
+ctrlEnterSubmit($("dmReplyBody"), sendDmMessage);
 
 // Formatting shortcuts inside a compose box. Keyed on the PHYSICAL e.code (KeyB/KeyK/…),
 // NOT e.key — so they fire even when the keyboard is in Hebrew layout, where the B key
@@ -3724,7 +3733,11 @@ function formatShortcuts(ta){
 formatShortcuts($("replyBody"));
 formatShortcuts($("newBody"));
 formatShortcuts($("editBody"));
-for (const id of ["replyLinkBtn", "newLinkBtn", "editLinkBtn"]) $(id).title = "הוספת קישור (Ctrl+K)";
+formatShortcuts($("dmBody"));
+formatShortcuts($("dmReplyBody"));
+$("dmLinkBtn").onclick = () => insertLink($("dmBody"));
+$("dmReplyLinkBtn").onclick = () => insertLink($("dmReplyBody"));
+for (const id of ["replyLinkBtn", "newLinkBtn", "editLinkBtn", "dmLinkBtn", "dmReplyLinkBtn"]) $(id).title = "הוספת קישור (Ctrl+K)";
 
 // Image lightbox: click any post image to enlarge; click anywhere / Esc to close.
 (function(){
