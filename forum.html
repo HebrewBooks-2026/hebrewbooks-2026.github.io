@@ -222,6 +222,7 @@
   .role-admin{background:#f4e6c4;color:#7a5a14}
   .role-moderator{background:#dfe9f7;color:#274a86}
   .when{color:var(--muted);font-size:.83rem}
+  .hdate{cursor:help}   /* Hebrew date; hover shows the exact civil date+time (title) */
   .post-body{white-space:pre-wrap;word-break:break-word;font-size:1.04rem}
   /* code: blocks are LTR, monospace, with a copy button; inline code is a small chip */
   .code-block{position:relative;direction:ltr;margin:8px 0}
@@ -1217,13 +1218,24 @@ function renderBody(text){
   // restore code blocks (their inner newlines/URLs stay literal inside <pre>/<code>)
   return h.replace(/\x00C(\d+)\x00/g, (_, i) => codeStore[+i]);
 }
+// Torah forum → Hebrew-calendar dates. Intl's "he-u-ca-hebrew" renders month names,
+// gershayim (כ״ה), and year (תשפ״ו) natively. NOTE: it flips the date at CIVIL MIDNIGHT,
+// not sunset — the standard convention for a digital Hebrew date (a real sunset calc would
+// need the user's location). The exact civil date+time stays reachable via the title tooltip.
 function when(ts){
-  try { return new Date(ts*1000).toLocaleString("he-IL",{dateStyle:"medium",timeStyle:"short"}); }
-  catch { return ""; }
+  try {
+    const d = new Date(ts*1000);
+    // full = weekday + Hebrew date ("יום שישי, כ״ה בתמוז תשפ״ו"); time composed separately so
+    // we get "…, 21:30" and not Intl's "…בשעה 21:30" wording.
+    const heb  = d.toLocaleDateString("he-u-ca-hebrew", { dateStyle:"full" });
+    const time = d.toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit" });
+    const greg = d.toLocaleString("he-IL", { dateStyle:"medium", timeStyle:"short" });
+    return `<span class="hdate" title="${greg}">${heb}, ${time}</span>`;
+  } catch { return ""; }
 }
-// Compact date (no time) for the category sidebar's "last message" line.
+// Compact date (no time, no weekday) for the category sidebar's "last message" line.
 function whenDate(ts){
-  try { return new Date(ts*1000).toLocaleDateString("he-IL",{dateStyle:"medium"}); }
+  try { return new Date(ts*1000).toLocaleDateString("he-u-ca-hebrew",{dateStyle:"long"}); }
   catch { return ""; }
 }
 function flash(text, kind){
@@ -2062,7 +2074,7 @@ function consumeHash(){
 // themselves get pruned so the API only shows the last few). Each publish.ps1 release
 // updates this on its own — nothing to maintain here.
 function clDate(d){
-  try{ return new Date(d).toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" }); }
+  try{ return new Date(d).toLocaleDateString("he-u-ca-hebrew", { dateStyle:"long" }); }
   catch{ return d || ""; }
 }
 // Each bullet -> a short summary line: prefer its bold "**…**" lead, trim trailing colon.
