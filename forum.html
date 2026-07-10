@@ -1218,24 +1218,79 @@ function renderBody(text){
   // restore code blocks (their inner newlines/URLs stay literal inside <pre>/<code>)
   return h.replace(/\x00C(\d+)\x00/g, (_, i) => codeStore[+i]);
 }
-// Torah forum → Hebrew-calendar dates. Intl's "he-u-ca-hebrew" renders month names,
-// gershayim (כ״ה), and year (תשפ״ו) natively. NOTE: it flips the date at CIVIL MIDNIGHT,
-// not sunset — the standard convention for a digital Hebrew date (a real sunset calc would
-// need the user's location). The exact civil date+time stays reachable via the title tooltip.
+// ===== Hebrew-calendar dates — SELF-CONTAINED (no Intl) =====================
+// A Torah forum wants Hebrew dates, but we CANNOT rely on the browser's Intl hebrew
+// calendar: some Windows / WebView2 ICU builds lack the Hebrew month-name + gematria
+// data and fall back to raw numbers ("5786 10 25"). So we do the Gregorian→Hebrew
+// conversion and the gematria ourselves. Arithmetic = Dershowitz–Reingold / Fourmilab;
+// validated against a full-ICU Intl across 2015–2035 (0 conversion errors). Regular
+// (non-final) letters by convention. NOTE: the Hebrew day flips at CIVIL MIDNIGHT, not
+// sunset — the standard for a digital date; the exact civil date+time is in the tooltip.
+function _mod(a,b){ return a - b*Math.floor(a/b); }
+const _HEB_EPOCH = 347995.5;
+function _hebLeap(y){ return _mod(y*7+1,19) < 7; }
+function _hebYearMonths(y){ return _hebLeap(y) ? 13 : 12; }
+function _hebDelay1(y){ const m=Math.floor((235*y-234)/19), p=12084+13753*m; let d=m*29+Math.floor(p/25920); if(_mod(3*(d+1),7)<3)d+=1; return d; }
+function _hebDelay2(y){ const l=_hebDelay1(y-1),pr=_hebDelay1(y),nx=_hebDelay1(y+1); return (nx-pr===356)?2:((pr-l===382)?1:0); }
+function _hebYearDays(y){ return _hebToJD(y+1,7,1)-_hebToJD(y,7,1); }
+function _longHeshvan(y){ return _mod(_hebYearDays(y),10)===5; }
+function _shortKislev(y){ return _mod(_hebYearDays(y),10)===3; }
+function _hebMonthDays(y,m){
+  if(m===2||m===4||m===6||m===10||m===13)return 29;
+  if(m===8&&!_longHeshvan(y))return 29;   // Heshvan
+  if(m===9&&_shortKislev(y))return 29;    // Kislev
+  if(m===12&&!_hebLeap(y))return 29;      // Adar (non-leap)
+  return 30;
+}
+function _hebToJD(y,month,day){
+  const months=_hebYearMonths(y);
+  let jd=_HEB_EPOCH+_hebDelay1(y)+_hebDelay2(y)+day+1;
+  if(month<7){ for(let mo=7;mo<=months;mo++)jd+=_hebMonthDays(y,mo); for(let mo=1;mo<month;mo++)jd+=_hebMonthDays(y,mo); }
+  else { for(let mo=7;mo<month;mo++)jd+=_hebMonthDays(y,mo); }
+  return jd;
+}
+function _gregToJD(y,m,d){ const a=Math.floor((14-m)/12),yy=y+4800-a,mm=m+12*a-3;
+  return d+Math.floor((153*mm+2)/5)+365*yy+Math.floor(yy/4)-Math.floor(yy/100)+Math.floor(yy/400)-32045-0.5; }
+function _jdToHeb(jd){
+  jd=Math.floor(jd)+0.5;
+  const count=Math.floor((jd-_HEB_EPOCH)*98496.0/35975351.0);
+  let y=count-1; for(let i=count; jd>=_hebToJD(i,7,1); i++) y=i;
+  const first=(jd<_hebToJD(y,1,1))?7:1;
+  let month=first; for(let mo=first; jd>_hebToJD(y,mo,_hebMonthDays(y,mo)); mo++) month=mo+1;
+  const day=Math.floor(jd-_hebToJD(y,month,1))+1;
+  return {year:y,month,day};
+}
+const _HEB_MONTHS=["","ניסן","אייר","סיוון","תמוז","אב","אלול","תשרי","חשוון","כסלו","טבת","שבט","אדר","אדר ב׳"];
+const _HEB_DOW=["יום ראשון","יום שני","יום שלישי","יום רביעי","יום חמישי","יום שישי","שבת"];
+const _G_ONES=["","א","ב","ג","ד","ה","ו","ז","ח","ט"], _G_TENS=["","י","כ","ל","מ","נ","ס","ע","פ","צ"], _G_HUND=["","ק","ר","ש","ת","תק","תר","תש","תת","תתק"];
+function _gematria(n){
+  n=_mod(n,1000);                                 // drop the thousands (5786 → תשפ״ו)
+  let s=_G_HUND[Math.floor(n/100)]; n=_mod(n,100);
+  if(n===15)s+="טו"; else if(n===16)s+="טז";      // avoid the divine name יה/יו
+  else { s+=_G_TENS[Math.floor(n/10)]; s+=_G_ONES[n%10]; }
+  return s.length===1 ? s+"׳" : s.slice(0,-1)+"״"+s.slice(-1);   // geresh / gershayim
+}
+function _hebMonthName(y,m){ return (m===12&&_hebLeap(y)) ? "אדר א׳" : _HEB_MONTHS[m]; }
+function _hebParts(d){
+  const h=_jdToHeb(_gregToJD(d.getFullYear(),d.getMonth()+1,d.getDate()));
+  return { dow:_HEB_DOW[d.getDay()], day:_gematria(h.day), month:_hebMonthName(h.year,h.month), year:_gematria(h.year) };
+}
+function hebDate(d){ const p=_hebParts(d); return `${p.day} ב${p.month} ${p.year}`; }
+function hebDateWeekday(d){ const p=_hebParts(d); return `${p.dow}, ${p.day} ב${p.month} ${p.year}`; }
+// Gregorian tooltip + clock — also built by hand (the same ICU gap can numeralize month names).
+const _GREG_MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+function _hhmm(d){ return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function _gregTip(d){ return `${d.getDate()} ב${_GREG_MONTHS[d.getMonth()]} ${d.getFullYear()}, ${_hhmm(d)}`; }
 function when(ts){
   try {
     const d = new Date(ts*1000);
-    // full = weekday + Hebrew date ("יום שישי, כ״ה בתמוז תשפ״ו"); time composed separately so
-    // we get "…, 21:30" and not Intl's "…בשעה 21:30" wording.
-    const heb  = d.toLocaleDateString("he-u-ca-hebrew-nu-hebr", { dateStyle:"full" });
-    const time = d.toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit" });
-    const greg = d.toLocaleString("he-IL", { dateStyle:"medium", timeStyle:"short" });
-    return `<span class="hdate" title="${greg}">${heb}, ${time}</span>`;
+    if (isNaN(d.getTime())) return "";
+    return `<span class="hdate" title="${_gregTip(d)}">${hebDateWeekday(d)}, ${_hhmm(d)}</span>`;
   } catch { return ""; }
 }
 // Compact date (no time, no weekday) for the category sidebar's "last message" line.
 function whenDate(ts){
-  try { return new Date(ts*1000).toLocaleDateString("he-u-ca-hebrew-nu-hebr",{dateStyle:"long"}); }
+  try { const d=new Date(ts*1000); return isNaN(d.getTime()) ? "" : hebDate(d); }
   catch { return ""; }
 }
 function flash(text, kind){
@@ -2074,7 +2129,7 @@ function consumeHash(){
 // themselves get pruned so the API only shows the last few). Each publish.ps1 release
 // updates this on its own — nothing to maintain here.
 function clDate(d){
-  try{ return new Date(d).toLocaleDateString("he-u-ca-hebrew-nu-hebr", { dateStyle:"long" }); }
+  try{ const dt=new Date(d); return isNaN(dt.getTime()) ? (d||"") : hebDate(dt); }
   catch{ return d || ""; }
 }
 // Each bullet -> a short summary line: prefer its bold "**…**" lead, trim trailing colon.
