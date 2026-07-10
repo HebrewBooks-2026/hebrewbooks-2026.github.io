@@ -1227,7 +1227,7 @@ function when(ts){
     const d = new Date(ts*1000);
     // full = weekday + Hebrew date ("יום שישי, כ״ה בתמוז תשפ״ו"); time composed separately so
     // we get "…, 21:30" and not Intl's "…בשעה 21:30" wording.
-    const heb  = d.toLocaleDateString("he-u-ca-hebrew", { dateStyle:"full" });
+    const heb  = d.toLocaleDateString("he-u-ca-hebrew-nu-hebr", { dateStyle:"full" });
     const time = d.toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit" });
     const greg = d.toLocaleString("he-IL", { dateStyle:"medium", timeStyle:"short" });
     return `<span class="hdate" title="${greg}">${heb}, ${time}</span>`;
@@ -1235,7 +1235,7 @@ function when(ts){
 }
 // Compact date (no time, no weekday) for the category sidebar's "last message" line.
 function whenDate(ts){
-  try { return new Date(ts*1000).toLocaleDateString("he-u-ca-hebrew",{dateStyle:"long"}); }
+  try { return new Date(ts*1000).toLocaleDateString("he-u-ca-hebrew-nu-hebr",{dateStyle:"long"}); }
   catch { return ""; }
 }
 function flash(text, kind){
@@ -2074,7 +2074,7 @@ function consumeHash(){
 // themselves get pruned so the API only shows the last few). Each publish.ps1 release
 // updates this on its own — nothing to maintain here.
 function clDate(d){
-  try{ return new Date(d).toLocaleDateString("he-u-ca-hebrew", { dateStyle:"long" }); }
+  try{ return new Date(d).toLocaleDateString("he-u-ca-hebrew-nu-hebr", { dateStyle:"long" }); }
   catch{ return d || ""; }
 }
 // Each bullet -> a short summary line: prefer its bold "**…**" lead, trim trailing colon.
