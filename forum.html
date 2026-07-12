@@ -253,6 +253,31 @@
   .like-count{display:inline-flex;align-items:center;font-weight:800;color:var(--muted);
     padding:2px 9px;border-radius:999px;background:var(--parch2);cursor:default;transition:background .12s,color .12s}
   .like-count:hover,.like-count:focus{color:var(--ink);background:var(--parch);outline:none}
+  /* ---- emoji reactions (shared by posts and DM messages) ---- */
+  .rx-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .rx-chip{display:inline-flex;align-items:center;gap:4px;background:#f2f2f2;border:1px solid var(--line);
+    border-radius:999px;padding:2px 9px;font-size:.95rem;cursor:pointer;font-family:inherit;line-height:1.5}
+  .rx-chip:hover{background:#eaeaea}
+  .rx-chip.mine{background:var(--gold-soft);border-color:var(--gold)}   /* I reacted with this one */
+  .rx-chip .rx-n{font-size:.78rem;font-weight:800;color:#555}
+  .rx-chip.mine .rx-n{color:#5d4a12}
+  .rx-add{background:transparent;border:1px dashed var(--line);border-radius:999px;padding:2px 9px;
+    cursor:pointer;font-size:.9rem;color:var(--muted);font-family:inherit;line-height:1.5;opacity:.75}
+  .rx-add:hover{opacity:1;background:#faf7ef;border-color:var(--gold)}
+  /* emoji picker popover (position:fixed, placed in JS next to the ＋ that opened it) */
+  .emoji-pop{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 16px 44px rgba(34,41,58,.24);padding:8px;width:322px}
+  .emoji-quick{display:flex;gap:4px;padding:2px 2px 7px;border-bottom:1px solid var(--line);margin-bottom:6px}
+  .emoji-tabs{display:flex;gap:2px;margin-bottom:6px;flex-wrap:wrap}
+  .emoji-tab{background:transparent;border:1px solid transparent;border-radius:8px;padding:3px 6px;
+    font-size:1.05rem;cursor:pointer;line-height:1;font-family:inherit}
+  .emoji-tab:hover{background:#f4f4f4}
+  .emoji-tab.on{background:var(--gold-soft);border-color:var(--gold)}
+  .emoji-grid{max-height:232px;overflow:auto}
+  .emoji-cells{display:grid;grid-template-columns:repeat(8,1fr);gap:2px}
+  .emoji-b{background:transparent;border:none;border-radius:8px;padding:4px;font-size:1.25rem;
+    cursor:pointer;line-height:1.2;font-family:inherit}
+  .emoji-b:hover{background:#f2ecdc}
   /* styled "who liked" popover */
   .like-pop{position:fixed;z-index:60;background:#fff;border:1px solid var(--line);border-radius:13px;
     box-shadow:0 12px 34px rgba(34,41,58,.18);padding:7px;min-width:165px;max-width:250px;max-height:280px;overflow:auto}
@@ -817,6 +842,13 @@
 
 <!-- @mention autocomplete dropdown (positioned in JS under the active compose box) -->
 <div id="mentionPop" class="mention-pop hidden"></div>
+
+<!-- emoji picker for reactions (posts + DM messages); positioned in JS next to its opener -->
+<div id="emojiPop" class="emoji-pop hidden">
+  <div class="emoji-quick" id="emojiQuick"></div>
+  <div class="emoji-tabs" id="emojiTabs"></div>
+  <div class="emoji-grid" id="emojiGrid"></div>
+</div>
 
 <!-- image lightbox (click a post image to enlarge) -->
 <div id="lightbox" class="lightbox hidden"><img id="lightboxImg" alt=""></div>
@@ -2031,7 +2063,10 @@ async function openConversation(id){
 async function refreshConversation(id, silent){
   const data = await api("/dm/" + id);
   curConvo = data;
-  const sig = data.messages.map(m => m.id).join(",");
+  // The signature drives the silent 6s poll. It folds in the REACTIONS too, otherwise a
+  // reaction added by the other side would never repaint (the message id list is unchanged).
+  const sig = data.messages.map(m =>
+    m.id + ":" + (m.reactions||[]).map(r => r.emoji + r.count).join(",")).join("|");
   if (silent && sig === dmSig) return;
   dmSig = sig;
   renderConvoChat(data);
@@ -2052,6 +2087,7 @@ function renderConvoChat(data){
       <div class="s-who">${mine?"אני":esc(m.author||"משתמש")}</div>
       <div>${renderBody(m.body)}</div>
       <div class="s-when">${when(m.created_at)}</div>
+      ${renderReactions(m.reactions, "dm", m.id, !!data.can_post)}
     </div>`;
   }).join("");
   box.scrollTop = box.scrollHeight;
@@ -2654,6 +2690,7 @@ function postHtml(o, byId){
       ${staff?`<span class="staff-menu">${staff}</span>`:""}
     </div>
     <div class="post-body">${renderBody(p.body)}</div>
+    ${renderReactions(p.reactions, "post", p.id, canPost())}
     ${actions?`<div class="post-actions">${actions}</div>`:""}
   </div>`;
 }
@@ -2841,6 +2878,110 @@ async function toggleLike(postId){
     renderThread();                                 // re-render so the count + popover list stay in sync
   } catch(e){ flash(e.message, "err"); }
 }
+
+// ---- emoji reactions (posts + DM messages) --------------------------------
+// One generic surface: every chip/opener carries data-rxtype ('post'|'dm') + data-rxid,
+// so a SINGLE delegated click handler serves both the thread and the private chat — no
+// per-render wiring. The server toggles (same emoji again = un-react) and hands back the
+// target's fresh summary, so we repaint just that row.
+const RX_QUICK = ["👍","❤️","😂","🙏","👏","😮","🎉","🔥"];
+const EMOJI_CATS = [
+  { key:"smile", label:"😀", list:["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","😋","😛","😜","🤪","😝","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","😎","🤓","🧐","😕","😟","🙁","☹️","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","💩","🤡","👻","👽","🤖"] },
+  { key:"hand",  label:"👍", list:["👍","👎","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","👇","☝️","👋","🤚","🖐️","✋","🖖","👏","🙌","👐","🤲","🤝","🙏","✍️","💪","🦾","💅","👂","👃","👀","👁️","👅","👄","🧠"] },
+  { key:"heart", label:"❤️", list:["❤️","🧡","💛","💚","💙","💜","🤎","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟","♥️","💯","💢","💥","💫","💦","💨","💬","🗨️","💭","🗯️","💤"] },
+  { key:"people",label:"🧑", list:["👶","🧒","👦","👧","🧑","👨","👩","🧓","👴","👵","🧔","👮","🕵️","💂","👷","🤴","👸","👳","👲","🧕","🤵","👰","👼","🎅","🦸","🦹","🧙","🧚","🧛","🧜","🧝","🧞","🧟","💆","💇","🚶","🏃","💃","🕺","👯","🧖","🧗","🤺","🏇","⛷️","🏂","🏌️","🏄","🚣","🏊","⛹️","🏋️","🚴","🚵","🤸","🤼","🤹","🧘","🛀","🛌"] },
+  { key:"animal",label:"🐶", list:["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🙈","🙉","🙊","🐒","🐔","🐧","🐦","🐤","🐣","🐥","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷️","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🦐","🦀","🐡","🐠","🐟","🐬","🐳","🐋","🦈","🐊","🐅","🐆","🦓","🦍","🐘","🐪","🐫","🦒","🦘","🐄","🐎","🐖","🐑","🦙","🐐","🦌","🐕","🐈","🐓","🦃","🦚","🦜","🕊️","🐇","🐁","🐿️","🦔"] },
+  { key:"food",  label:"🍎", list:["🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🥦","🥬","🥒","🌶️","🌽","🥕","🧄","🧅","🥔","🥐","🥯","🍞","🥖","🥨","🧀","🥚","🍳","🧈","🥞","🧇","🥩","🍗","🍖","🌭","🍔","🍟","🍕","🥪","🥙","🧆","🌮","🌯","🥗","🥘","🍝","🍜","🍲","🍛","🍣","🍱","🥟","🍤","🍙","🍚","🍥","🍡","🍧","🍨","🍦","🥧","🧁","🍰","🎂","🍮","🍭","🍬","🍫","🍿","🍩","🍪","🌰","🥜","🍯","🥛","🍼","☕","🍵","🧃","🥤","🍶","🥂","🍷","🥃","🍸","🍹","🧉","🍾"] },
+  { key:"object",label:"📚", list:["📚","📖","📕","📗","📘","📙","📔","📓","📒","📃","📜","📄","📰","🔖","🏷️","💰","💵","💸","💳","🧾","✉️","📧","📨","📩","📤","📥","📦","📫","📮","✏️","✒️","🖋️","🖊️","🖌️","🖍️","📝","💼","📁","📂","🗂️","📅","📆","🗒️","🗓️","📇","📈","📉","📊","📋","📌","📍","📎","🖇️","📏","📐","✂️","🗑️","🔒","🔓","🔐","🔑","🗝️","🔨","🪓","⚒️","🛠️","🗡️","⚔️","🔧","🔩","⚙️","⚖️","🔗","⛓️","🧰","🧲","💡","🔦","🕯️","🧯","🔮","📿","🧿","💎","⌚","📱","💻","⌨️","🖥️","🖨️","🖱️","💾","💿","🎥","📷","📸","📹","🔍","🔎","⏰","⏱️","🧭","🔔","🔕","📢","📣","🎵","🎶","🎤","🎧","🎼","🎹","🥁","🎷","🎺","🎸","🎻"] },
+  { key:"symbol",label:"✅", list:["✅","☑️","✔️","❌","❎","⭕","🚫","⛔","🔞","⚠️","🔱","⚜️","🔰","♻️","✳️","❇️","💠","🌀","🔴","🟠","🟡","🟢","🔵","🟣","⚫","⚪","🟤","🔺","🔻","🔶","🔷","⭐","🌟","✨","⚡","🔥","🌈","☀️","🌤️","⛅","☁️","🌧️","⛈️","❄️","☃️","⛄","💨","🌪️","🌊","💧","☔","🎉","🎊","🎈","🎁","🎀","🏆","🥇","🥈","🥉","🏅","🎖️","🏵️","🎗️","🎯","🎲","🧩","♟️","❓","❔","❕","❗","‼️","⁉️","🕎","✡️","🔯","🕍","🇮🇱"] },
+];
+let rxTarget = null;      // {type, id} while the picker is open
+let emojiBuilt = false, emojiCat = 0;
+// Chips + the "＋" opener. `canReact` differs per surface: posts use canPost(), a DM uses
+// the server's can_post (an admin merely OVERSEEING a thread is read-only and gets none).
+function renderReactions(list, type, id, canReact){
+  const rx = list || [];
+  if (!rx.length && !canReact) return "";
+  const chips = rx.map(r =>
+    `<button class="rx-chip${r.mine?' mine':''}" data-rxact="tog" data-rxtype="${type}" data-rxid="${id}"` +
+    ` data-emoji="${esc(r.emoji)}" title="${esc((r.names||'').split('||').filter(Boolean).join(', '))}">` +
+    `${esc(r.emoji)}<span class="rx-n">${r.count}</span></button>`).join("");
+  const add = canReact
+    ? `<button class="rx-add" data-rxact="add" data-rxtype="${type}" data-rxid="${id}" title="הוסף ריאקציה">🙂 ＋</button>`
+    : "";
+  return `<div class="rx-row">${chips}${add}</div>`;
+}
+function openEmojiPicker(anchor, type, id){
+  if (!me) return openAuth();
+  rxTarget = { type, id };
+  const pop = $("emojiPop");
+  buildEmojiPicker();
+  pop.classList.remove("hidden");
+  // clamp into the viewport; prefer below the opener, flip above when there's no room
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+  let top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - 6 - h);
+  pop.style.top = top + "px";
+}
+function closeEmojiPicker(){ $("emojiPop").classList.add("hidden"); rxTarget = null; }
+function buildEmojiPicker(){
+  if (!emojiBuilt){
+    $("emojiQuick").innerHTML = RX_QUICK.map(e => `<button class="emoji-b" data-e="${e}">${e}</button>`).join("");
+    $("emojiTabs").innerHTML = EMOJI_CATS.map((c,i) => `<button class="emoji-tab" data-cat="${i}">${c.label}</button>`).join("");
+    $("emojiTabs").querySelectorAll("[data-cat]").forEach(b =>
+      b.onclick = () => { emojiCat = parseInt(b.dataset.cat,10); paintEmojiGrid(); });
+    emojiBuilt = true;
+  }
+  paintEmojiGrid();
+}
+function paintEmojiGrid(){
+  $("emojiTabs").querySelectorAll(".emoji-tab").forEach((b,i) => b.classList.toggle("on", i === emojiCat));
+  $("emojiGrid").innerHTML =
+    `<div class="emoji-cells">${EMOJI_CATS[emojiCat].list.map(e => `<button class="emoji-b" data-e="${e}">${e}</button>`).join("")}</div>`;
+  $("emojiPop").querySelectorAll("[data-e]").forEach(b => b.onclick = () => {
+    if (rxTarget) sendReaction(rxTarget.type, rxTarget.id, b.getAttribute("data-e"));
+    closeEmojiPicker();
+  });
+}
+async function sendReaction(type, id, emoji){
+  if (!me) return openAuth();
+  try{
+    const r = await api("/reactions", { method:"POST", body:{ target_type:type, target_id:id, emoji }});
+    if (type === "post"){
+      const p = curPosts.find(x => x.id === id);
+      if (p){ p.reactions = r.reactions; renderThread(); }
+    } else if (curConvo){
+      const m = (curConvo.messages||[]).find(x => x.id === id);
+      if (m){
+        m.reactions = r.reactions;
+        const box = $("dmMessages"), keep = box.scrollTop;   // a reaction must not yank the chat to the bottom
+        renderConvoChat(curConvo);
+        box.scrollTop = keep;
+      }
+    }
+  }catch(e){ flash(e.message, "err"); }
+}
+// ONE delegated handler for every chip / ＋ on the page (thread AND private chat).
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-rxact]");
+  if (!b) return;
+  const type = b.getAttribute("data-rxtype");
+  const id = parseInt(b.getAttribute("data-rxid"), 10);
+  if (b.getAttribute("data-rxact") === "add") openEmojiPicker(b, type, id);
+  else sendReaction(type, id, b.getAttribute("data-emoji"));
+});
+// Dismiss the picker on an outside click (the ＋ itself is excluded — it just opened it) / Esc.
+document.addEventListener("click", (e) => {
+  const pop = $("emojiPop");
+  if (pop.classList.contains("hidden")) return;
+  if (pop.contains(e.target)) return;
+  if (e.target.closest && e.target.closest("[data-rxact='add']")) return;
+  closeEmojiPicker();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeEmojiPicker(); });
+
 // Toggle the topic's accepted answer. Re-marking the current solution clears it.
 async function markSolution(postId){
   try{
