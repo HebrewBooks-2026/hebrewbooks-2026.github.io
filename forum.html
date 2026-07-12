@@ -2991,7 +2991,7 @@ function renderReactions(list, type, id, canReact){
     ` data-emoji="${esc(r.emoji)}" title="${esc((r.names||'').split('||').filter(Boolean).join(', '))}">` +
     `${esc(r.emoji)}<span class="rx-n">${r.count}</span></button>`).join("");
   const add = canReact
-    ? `<button class="rx-add" data-rxact="add" data-rxtype="${type}" data-rxid="${id}" title="הוסף ריאקציה">🙂 ＋</button>`
+    ? `<button class="rx-add" data-rxact="add" data-rxtype="${type}" data-rxid="${id}" title="הוסף אימוג'י">🙂 ＋</button>`
     : "";
   return `<div class="rx-row">${chips}${add}</div>`;
 }
