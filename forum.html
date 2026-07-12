@@ -582,6 +582,13 @@
   .dm-snippet{font-size:.86rem;color:#555;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dm-when{font-size:.74rem;color:var(--muted);margin-top:3px}
   .dm-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);flex:none;margin-top:6px}
+  /* Keep the DM window within the screen: the modal already caps at the viewport
+     height; make the ACTIVE pane fill it as a flex column so only the conversation
+     list / message area scrolls — the composer (with its formatting toolbar) then
+     never gets pushed below the bottom edge. */
+  #dmListPane, #dmChatPane{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  #dmList, #dmMessages{flex:1 1 auto;min-height:0;max-height:none}
+  @media (max-width:640px){ #dmOverlay .modal{padding:16px} }
 </style>
 </head>
 <body>
@@ -994,7 +1001,7 @@
         </div>
       </form>
 
-      <div id="dmList" class="modal-body" style="max-height:55vh;overflow:auto"></div>
+      <div id="dmList" class="modal-body" style="overflow:auto"></div>
       <div class="modal-actions"><button id="dmClose" class="btn btn-light" type="button">סגור</button></div>
     </div>
 
