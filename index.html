@@ -264,8 +264,8 @@
     padding:16px 20px;line-height:1.6}
   .order-card .disclaimer b{color:var(--amber)}
 
-  /* Floating order-drive badge — fixed top-left, gently pulses to draw the eye,
-     stays visible while scrolling, jumps to the #order-drive callout on click. */
+  /* Floating "online repository" badge — fixed top-left, gently pulses to draw the eye,
+     stays visible while scrolling, opens the online library (hebrewbooks.pages.dev). */
   .order-fab{
     position:fixed;top:84px;left:18px;z-index:50;width:124px;height:124px;border-radius:50%;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;
@@ -302,9 +302,9 @@
 </head>
 <body>
 
-<a class="order-fab" href="#order-drive" aria-label="להזמנת כונן עם כל המאגר לחץ כאן">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
-  להזמנת כונן<br>עם כל המאגר<br>לחץ כאן
+<a class="order-fab" href="https://hebrewbooks.pages.dev/" target="_blank" rel="noopener" aria-label="למאגר המקוון — עיון בכל הספרייה אונליין">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+  למאגר המקוון<br>עיון אונליין
 </a>
 
 <header class="topbar">
@@ -468,14 +468,13 @@
 <section id="order-drive" class="order">
   <div class="wrap">
     <div class="order-card">
-      <span class="badge"><span class="dot"></span> הזמנת כונן</span>
-      <h2 class="serif">רוצה את <span class="accent">כל המאגר</span> על כונן?</h2>
-      <p>ניתן להזמין כונן הכולל את <b>המאגר המלא</b> — כל הספרייה מוכנה לחיבור למחשב והפעלה מיידית.</p>
-      <a class="btn btn-gold" href="https://hebrewbooks.kesug.com/" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
-        להזמנת כונן ←
+      <span class="badge"><span class="dot"></span> מאגר מקוון</span>
+      <h2 class="serif">רוצה לעיין <span class="accent">בלי להתקין</span>?</h2>
+      <p>אפשר לעיין ולחפש ב<b>כל הספרייה אונליין</b>, ישירות מהדפדפן — בלי התקנה ובלי כונן.</p>
+      <a class="btn btn-gold" href="https://hebrewbooks.pages.dev/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        למאגר המקוון ←
       </a>
-      <p class="disclaimer">⚠ <b>הזמנת הכוננים אינה קשורה לפיתוח התוכנה ואינה באחריותנו.</b> השירות מסופק על ידי גורם חיצוני, ללא מטרות רווח. לכל שאלה בנוגע לכוננים יש לפנות אל הגורם האחראי על חלוקתם.</p>
     </div>
   </div>
 </section>
