@@ -918,24 +918,24 @@
     <!-- ===== list pane ===== -->
     <div id="supportListPane">
       <div class="support-head">
-        <h2>🛠️ תמיכה ודיווח באגים</h2>
+        <h2>🛠️ תמיכה ועזרה בתוכנה</h2>
         <div class="support-head-btns">
           <button id="supportLinkBtn" class="btn btn-light btn-sm" type="button" title="העתק קישור ישיר לחלון התמיכה">🔗 קישור</button>
           <button id="newTicketBtn" class="btn btn-gold btn-sm" type="button">+ פנייה חדשה</button>
         </div>
       </div>
-      <p class="support-intro">מערכת התמיכה מיועדת אך ורק לדיווח על <b>באגים ותקלות בתוכנה</b>. עוזר חכם ינתח את הפנייה (ואת קובץ הלוג אם תצרף), ינסה לעזור, ורק תקלה שדורשת תיקון תועבר למפתח.</p>
-      <div id="supportBlockedNote" class="support-blocked-note hidden">🚫 הגישה שלך למערכת התמיכה נחסמה. לנושאים אחרים תוכל להשתמש בפורום הרגיל.</div>
+      <p class="support-intro">כאן מקבלים עזרה בכל נושא שקשור ל<b>תוכנה</b> — תקלות, באגים, וגם <b>שאלות והסברים</b> על השימוש בה. עוזר חכם ינתח את הפנייה (ואת קובץ הלוג אם תצרף), ינסה לעזור, ורק תקלה שדורשת תיקון תועבר למפתח. (נושאים שאינם קשורים לתוכנה — בפורום הרגיל.)</p>
+      <div id="supportBlockedNote" class="support-blocked-note hidden">🚫 הגישה שלך למערכת התמיכה נחסמה, מכיוון שנשלחו הודעות שאינן קשורות לתוכנה. לנושאים אחרים תוכל להשתמש בפורום הרגיל.</div>
 
       <!-- new-ticket form (collapsed by default) -->
       <form id="newTicketForm" class="support-newform hidden">
         <div>
           <label class="fld">כותרת</label>
-          <input id="ntTitle" class="in" maxlength="300" placeholder="תיאור קצר של התקלה" required>
+          <input id="ntTitle" class="in" maxlength="300" placeholder="תיאור קצר של השאלה או התקלה" required>
         </div>
         <div>
-          <label class="fld">תיאור הבעיה</label>
-          <textarea id="ntBody" class="in" placeholder="מה ניסית לעשות? מה קרה? מה ציפית שיקרה?" required></textarea>
+          <label class="fld">פירוט</label>
+          <textarea id="ntBody" class="in" placeholder="שאל את שאלתך, או תאר: מה ניסית לעשות? מה קרה? מה ציפית שיקרה?" required></textarea>
         </div>
         <div class="support-log-row">
           <button id="ntLogBtn" class="btn btn-light btn-sm" type="button">📄 צרף לוג / ZIP</button>
@@ -992,9 +992,9 @@
 </div>
 
 <!-- floating "report a bug" bubble — the prominent, always-visible invite into support -->
-<button id="supportFab" class="support-fab" type="button" aria-label="תמיכה ודיווח באגים" title="נתקלת בבאג? דברו איתנו">
+<button id="supportFab" class="support-fab" type="button" aria-label="תמיכה ועזרה בתוכנה" title="שאלה או תקלה בתוכנה? דברו איתנו">
   <span class="fab-ic">🛠️</span>
-  <span class="fab-tip">נתקלת בבאג? דברו איתנו</span>
+  <span class="fab-tip">שאלה או תקלה בתוכנה? דברו איתנו</span>
 </button>
 
 <!-- private messages (DMs). Same two-pane shape as support: a conversation list and a
@@ -1719,7 +1719,9 @@ function renderUsers(){
     }
     if (!self)
       actions += `<button class="btn btn-light btn-sm" data-block="${u.id}" data-blocked="${u.is_blocked?1:0}">${u.is_blocked?"בטל חסימה":"חסום"}</button>`;
-    if (!self)
+    // AI-block toggle. On YOURSELF only the "unblock" side is offered — an admin who got
+    // AI-blocked must always be able to free themselves (there's no one above them to do it).
+    if (!self || u.support_blocked)
       actions += `<button class="btn btn-light btn-sm" data-supblock="${u.id}" data-sb="${u.support_blocked?1:0}">${u.support_blocked?"בטל חסימת AI":"חסום AI"}</button>`;
     const blockedTag = u.is_blocked ? ` <span class="role-tag" style="background:#fbeeeb;color:var(--danger)">חסום</span>` : "";
     const supTag = u.support_blocked ? ` <span class="role-tag" style="background:#fdeede;color:#a5600f">AI חסום</span>` : "";
@@ -1797,7 +1799,7 @@ async function loadSupportTickets(){
 }
 function renderSupportTickets(){
   const box = $("supportTickets");
-  if (!supportTickets.length){ box.innerHTML = `<div class="empty">אין עדיין פניות. פתח פנייה חדשה כדי לדווח על תקלה.</div>`; return; }
+  if (!supportTickets.length){ box.innerHTML = `<div class="empty">אין עדיין פניות. פתח פנייה חדשה כדי לשאול שאלה או לדווח על תקלה.</div>`; return; }
   const staff = atLeast("moderator");
   box.innerHTML = supportTickets.map(t => `
     <div class="ticket-row" data-id="${t.id}">
