@@ -393,7 +393,9 @@
     background:var(--parch);border-radius:8px}
   .post-body .rich hr{border:0;border-top:1px solid var(--line);margin:1.1em 0}
   .post-body .rich code{background:var(--parch2);padding:1px 6px;border-radius:5px;font-size:.92em}
-  .post-body .rich pre{background:var(--parch2);padding:10px 12px;border-radius:8px;overflow:auto}
+  /* .post-body pre paints light-on-dark; this rule repaints the background light, so it MUST
+     re-set the colour too — otherwise the near-white text lands on cream and vanishes. */
+  .post-body .rich pre{background:var(--parch2);color:var(--ink);padding:10px 12px;border-radius:8px;overflow:auto}
   .post-body .rich a{color:var(--indigo);font-weight:600;text-decoration:underline}
 
   /* spoiler: a collapsed <details> the reader clicks to reveal (text mode emits
