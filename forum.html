@@ -173,6 +173,17 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  /* ---- read state: a topic with posts you haven't seen ---- */
+  .topic-row.unread{background:#fffdf5}
+  .topic-row.unread .t-title{font-weight:800;color:var(--ink)}
+  .t-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--gold);
+    box-shadow:0 0 0 3px rgba(212,170,60,.18)}
+  .pill-new{background:var(--gold);color:#3a2c07}
+  /* "jump to the first reply you haven't read" — sits above the thread */
+  .unread-jump{display:block;width:100%;margin:0 0 12px;padding:11px 16px;cursor:pointer;
+    font:inherit;font-weight:700;color:#3a2c07;background:var(--gold-soft);
+    border:1px solid var(--gold);border-radius:11px;text-align:center}
+  .unread-jump:hover{background:var(--gold);}
   /* topic list filter pills */
   .topic-filters{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
   .filter-pill{font-size:.85rem;font-weight:700;color:var(--muted);background:#fff;border:1px solid var(--line);
@@ -669,8 +680,10 @@
         <input id="topicSearch" class="in topic-search" type="search" placeholder="🔍 חיפוש בפורום…" autocomplete="off">
         <div id="topicFilters" class="topic-filters">
           <button class="filter-pill on" data-filter="">הכל</button>
+          <button class="filter-pill hidden" data-filter="unread" id="unreadPill">לא נקראו<span id="unreadPillCount" class="req-badge hidden">0</span></button>
           <button class="filter-pill" data-filter="unanswered">ללא מענה</button>
           <button class="filter-pill" data-filter="unsolved">לא נפתרו</button>
+          <button id="markAllReadBtn" class="btn btn-ghost btn-sm hidden" type="button" title="סמן את כל הנושאים כנקראו">✓ סמן הכל כנקרא</button>
         </div>
       </div>
       <div id="topics" class="card"></div>
@@ -691,6 +704,7 @@
         <div id="topicMod" class="row-actions"></div>
       </div>
     </div>
+    <button id="unreadJump" class="unread-jump hidden" type="button"></button>
     <div id="posts" class="card"></div>
     <div id="postsPager" class="pager hidden"></div>
     <div id="replyBox" class="card hidden" style="margin-top:16px">
@@ -1411,7 +1425,7 @@ function renderAuth(){
   const slot = $("authSlot");
   $("bellBtn").classList.toggle("hidden", !me);   // bell only for signed-in users
   $("dmBtn").classList.toggle("hidden", !me);     // private-message inbox only for signed-in users
-  if (!me){ setBell(0); setDmBadge(0); }
+  if (!me){ setBell(0); setDmBadge(0); setUnreadTopics(0); }
   if (me){
     const tag = me.role !== "member"
       ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
@@ -2300,6 +2314,32 @@ function updateListTitle(){
 }
 // pre: a {topics:[...]} payload already fetched (e.g. by /bootstrap) — skips the
 // round-trip. Only the default view (no category / sort=new / no search) is pre-fed.
+// ---- read state (topics) ---------------------------------------------------
+// The "לא נקראו" pill and its count, plus the mark-all-read button. Both are meaningless
+// signed out (the server sends unread=0 for everyone), so they stay hidden.
+function setUnreadTopics(n){
+  const signedIn = !!me;
+  $("unreadPill").classList.toggle("hidden", !signedIn);
+  $("markAllReadBtn").classList.toggle("hidden", !signedIn || !n);
+  const b = $("unreadPillCount");
+  if (signedIn && n > 0){ b.textContent = n > 99 ? "99+" : n; b.classList.remove("hidden"); }
+  else b.classList.add("hidden");
+}
+async function markAllTopicsRead(){
+  try{
+    await api("/topics/read", { method:"POST" });
+    if (me) me.reads_cutoff_at = Math.floor(Date.now()/1000);
+    if (listFilter === "unread"){ listFilter = ""; syncFilterPills(); }
+    await loadTopics();
+    flash("כל הנושאים סומנו כנקראו.", "ok");
+  }catch(e){ flash(e.message, "err"); }
+}
+// Reflect `listFilter` back onto the pill row (used after mark-all-read clears the filter).
+function syncFilterPills(){
+  document.querySelectorAll("#topicFilters .filter-pill").forEach(p =>
+    p.classList.toggle("on", (p.getAttribute("data-filter") || "") === listFilter));
+}
+
 async function loadTopics(pre){
   updateListTitle();
   let data = pre;
@@ -2312,6 +2352,7 @@ async function loadTopics(pre){
     p.set("page", topicPage);
     data = await api("/topics?" + p.toString());
   }
+  if (data.unread_topics !== undefined) setUnreadTopics(data.unread_topics);
   const box = $("topics");
   if (!data.topics.length){
     box.innerHTML = `<div class="empty">${searchQuery
@@ -2322,12 +2363,14 @@ async function loadTopics(pre){
   }
   renderPager(data.total || 0, data.page_size || 30, data.page || topicPage);
   box.innerHTML = data.topics.map(t => `
-    <div class="topic-row" data-id="${t.id}">
+    <div class="topic-row${t.unread?' unread':''}" data-id="${t.id}">
+      ${t.unread?'<span class="t-dot" title="יש כאן תוכן שלא קראת"></span>':''}
       <div>
         <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
+      ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
@@ -2542,6 +2585,28 @@ async function openTopic(id, opts){
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
   if (canReply){ restoreReplyDraft(id); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
+
+  // "Jump to the first reply you haven't read". The server hands back the read cursor as it
+  // was BEFORE this visit (it advances it right after), so this is the one moment we can
+  // compute it. Only offered when we're landing on page 1 with no explicit deep-link anchor
+  // — an anchor/pager move already says where the reader wants to be. Own posts don't count.
+  const jump = $("unreadJump");
+  jump.classList.add("hidden");
+  if (me && !anchor && !opts.page){
+    const since = t.last_read_at || 0;
+    const fresh = curPosts.filter(p => p.created_at > since && p.user_id !== me.id);
+    if (fresh.length){
+      const first = fresh[0];
+      jump.textContent = `↓ ${fresh.length === 1 ? "יש תגובה אחת שלא קראת" : `יש ${fresh.length} תגובות שלא קראת`} — קפוץ לראשונה`;
+      jump.classList.remove("hidden");
+      jump.onclick = () => {
+        const pg = pageOfPost(first.id);
+        if (pg !== curPostPage){ curPostPage = pg; renderThread(); }   // may live on a later page
+        jump.classList.add("hidden");
+        jumpToPost(first.id);   // scroll + flash-highlight
+      };
+    }
+  }
 
   show("viewTopic");
   if (opts.page) $("topicTitle").scrollIntoView({ behavior:"smooth", block:"start" });  // page change → top
@@ -3938,6 +4003,7 @@ $("newTopicBtn").onclick = () => {
   if (!restoreNewDraft() && activeCat) $("newCat").value = activeCat;
 };
 $("addCatBtn").onclick = () => addCategory();
+$("markAllReadBtn").onclick = markAllTopicsRead;
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
 // topic sort selector (persisted)
@@ -4215,6 +4281,7 @@ setInterval(() => { if (!document.hidden) autoRefresh(); }, 30000);
     renderAuth();
     setBell(boot.unread_notifications || 0);   // seed the bell from the first round-trip
     setDmBadge(boot.unread_dm || 0);           // seed the private-message inbox badge too
+    setUnreadTopics(boot.unread_topics || 0);  // …and the "לא נקראו" topic pill
     // Google first-timers (no join form yet) are prompted immediately.
     if (me && me.status === "incomplete") openJoin();
     await loadCategories(boot.categories);
