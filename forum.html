@@ -173,6 +173,16 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  /* ---- presence: "N צופים כעת" in the header ---- */
+  .online-chip{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700;
+    color:#e8eaf0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);
+    border-radius:999px;padding:4px 11px;white-space:nowrap;cursor:default}
+  .online-chip b{font-weight:800}
+  .online-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex:none;
+    box-shadow:0 0 0 3px rgba(74,222,128,.22);animation:onlinePulse 2.4s ease-in-out infinite}
+  @keyframes onlinePulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @media (prefers-reduced-motion:reduce){ .online-dot{animation:none} }
+  @media (max-width:640px){ .online-chip .online-lbl{display:none} }
   /* ---- read state: a topic with posts you haven't seen ---- */
   .topic-row.unread{background:#fffdf5}
   .topic-row.unread .t-title{font-weight:800;color:var(--ink)}
@@ -640,6 +650,7 @@
     <nav class="nav">
       <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
       <div class="nav-right">
+        <span id="onlineChip" class="online-chip hidden" title=""><span class="online-dot"></span><b id="onlineCount">0</b> <span class="online-lbl">צופים כעת</span></span>
         <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
         <button id="dmBtn" class="bell hidden" type="button" title="הודעות פרטיות" aria-label="הודעות פרטיות">✉️<span id="dmBadge" class="bell-badge hidden">0</span></button>
         <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
@@ -2314,6 +2325,35 @@ function updateListTitle(){
 }
 // pre: a {topics:[...]} payload already fetched (e.g. by /bootstrap) — skips the
 // round-trip. Only the default view (no category / sort=new / no search) is pre-fed.
+// ---- presence: "N צופים כעת" -----------------------------------------------
+// A 60s heartbeat (signed in or not) keeps one row alive per viewer; the server counts
+// anyone seen in the last 150s. Guests get a random id minted once per browser — it holds
+// no personal data and is never linked to anything; it only stops one guest in three tabs
+// from counting as three people.
+function guestId(){
+  let g = localStorage.getItem("forum_gid");
+  if (!g){
+    g = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2,"0")).join("");
+    localStorage.setItem("forum_gid", g);
+  }
+  return g;
+}
+function renderOnline(p){
+  const chip = $("onlineChip");
+  if (!p || !p.total){ chip.classList.add("hidden"); return; }
+  $("onlineCount").textContent = p.total;
+  // tooltip: who exactly — members by name, guests as a count
+  const bits = [];
+  if (p.members && p.members.length) bits.push(p.members.join(", "));
+  if (p.guests) bits.push(p.guests === 1 ? "אורח אחד" : `${p.guests} אורחים`);
+  chip.title = bits.length ? "צופים כעת: " + bits.join(" · ") : "";
+  chip.classList.remove("hidden");
+}
+async function heartbeat(){
+  try{ renderOnline(await api("/presence", { method:"POST", body:{ gid: guestId() } })); }
+  catch{}   // presence is decorative — a failed beat must never surface an error
+}
+
 // ---- read state (topics) ---------------------------------------------------
 // The "לא נקראו" pill and its count, plus the mark-all-read button. Both are meaningless
 // signed out (the server sends unread=0 for everyone), so they stay hidden.
@@ -4267,9 +4307,15 @@ async function autoRefresh(){
 }
 // every 30s, and only while the tab is actually visible
 setInterval(() => { if (!document.hidden) autoRefresh(); }, 30000);
+// presence heartbeat — 60s, visible tabs only (a background tab isn't "viewing"). The
+// server's 150s window spans two beats, so one dropped request doesn't flicker you out.
+setInterval(() => { if (!document.hidden) heartbeat(); }, 60000);
+// beat immediately when the tab comes back, so returning shows a fresh count at once
+document.addEventListener("visibilitychange", () => { if (!document.hidden) heartbeat(); });
 
 (async function init(){
   consumeHash();
+  heartbeat();       // fire-and-forget: register this viewer + paint the "צופים כעת" chip
   loadChangelog();   // fire-and-forget: a slow cross-origin GitHub fetch that must
                      // NEVER block the forum from painting (fills "מה חדש" late).
   try{
