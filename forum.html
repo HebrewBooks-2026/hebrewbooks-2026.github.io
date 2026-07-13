@@ -173,10 +173,40 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
-  /* ---- presence: "N צופים כעת" in the header ---- */
-  .online-chip{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700;
-    color:#e8eaf0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);
-    border-radius:999px;padding:4px 11px;white-space:nowrap;cursor:default}
+  /* ---- header: keep it to ONE row. The brand must never wrap (it used to, which shoved
+     the whole nav onto a second line), and the loose buttons are now folded into menus. ---- */
+  .brand{white-space:nowrap}
+  /* nowrap means it can't wrap — so it must be allowed to SHRINK instead of overflowing */
+  .bar .nav .brand{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .bar .nav .nav-right{flex:none}
+  @media (max-width:820px){ .brand{font-size:1rem} .brand .logo{width:32px;height:32px;font-size:1.1rem} }
+  @media (max-width:560px){ #userMenuName{display:inline-block;max-width:80px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom} }
+  .nav-icons{display:inline-flex;align-items:center;gap:4px}
+  .nav-menu{position:relative;display:inline-flex}
+  .nav-menu-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.86rem;
+    font-weight:700;color:#e8eaf0;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
+    border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+  .nav-menu-btn:hover{background:rgba(255,255,255,.18)}
+  .nav-menu-btn .caret{font-size:.7rem;opacity:.8}
+  .nav-menu.open .nav-menu-btn{background:rgba(255,255,255,.22)}
+  .nav-drop{position:absolute;top:calc(100% + 8px);inset-inline-start:0;z-index:80;min-width:210px;
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px;
+    box-shadow:0 14px 40px rgba(21,35,63,.28)}
+  .nav-drop-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+    font:inherit;font-size:.9rem;font-weight:700;color:var(--ink);background:none;border:none;
+    border-radius:8px;padding:9px 11px;cursor:pointer;text-align:start}
+  .nav-drop-item:hover{background:var(--parch)}
+  .nav-drop-item.danger{color:var(--danger)}
+  .nav-drop-item.danger:hover{background:#fbeeeb}
+  .nav-drop-sep{height:1px;background:var(--line);margin:5px 2px}
+  /* the role tag inside the user-menu button */
+  #userMenuTag:not(:empty){font-size:.7rem;font-weight:800;border-radius:999px;padding:2px 7px;
+    background:var(--gold);color:#3a2c07}
+  /* ---- presence: "N צופים כעת" — lives beside the list title, on a LIGHT background ---- */
+  .online-chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;
+    color:var(--muted);background:var(--parch2);border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;white-space:nowrap;cursor:default;vertical-align:middle}
   .online-chip b{font-weight:800}
   .online-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex:none;
     box-shadow:0 0 0 3px rgba(74,222,128,.22);animation:onlinePulse 2.4s ease-in-out infinite}
@@ -648,12 +678,36 @@
 <header class="bar">
   <div class="wrap">
     <nav class="nav">
-      <a href="forum.html" class="brand"><span class="logo serif">ס</span> פורום HebrewBooks - ארון הספרים הדיגיטלי</a>
+      <a href="forum.html" class="brand" title="פורום ארון הספרים הדיגיטלי"><span class="logo serif">ס</span> פורום ארון הספרים</a>
       <div class="nav-right">
-        <span id="onlineChip" class="online-chip hidden" title=""><span class="online-dot"></span><b id="onlineCount">0</b> <span class="online-lbl">צופים כעת</span></span>
-        <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
-        <button id="dmBtn" class="bell hidden" type="button" title="הודעות פרטיות" aria-label="הודעות פרטיות">✉️<span id="dmBadge" class="bell-badge hidden">0</span></button>
-        <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
+        <!-- icon cluster: the three things you actually click all day -->
+        <span class="nav-icons">
+          <button id="bellBtn" class="bell hidden" type="button" title="התראות" aria-label="התראות">🔔<span id="bellBadge" class="bell-badge hidden">0</span></button>
+          <button id="dmBtn" class="bell hidden" type="button" title="הודעות פרטיות" aria-label="הודעות פרטיות">✉️<span id="dmBadge" class="bell-badge hidden">0</span></button>
+          <button id="activityBtn" class="bell" type="button" title="פעילות אחרונה" aria-label="פעילות אחרונה">📋</button>
+        </span>
+        <!-- staff tools, folded into one menu (was 3 loose buttons) -->
+        <span id="adminMenu" class="nav-menu hidden">
+          <button id="adminMenuBtn" class="nav-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">
+            ניהול <span id="adminBadge" class="req-badge hidden">0</span> <span class="caret">▾</span>
+          </button>
+          <div id="adminDrop" class="nav-drop hidden" role="menu">
+            <button class="nav-drop-item" id="reqBtn" type="button" role="menuitem">בקשות הצטרפות<span id="reqBadge" class="req-badge hidden">0</span></button>
+            <button class="nav-drop-item" id="usersBtn" type="button" role="menuitem">משתמשים<span id="usrCount" class="count-chip hidden">0</span></button>
+            <button class="nav-drop-item" id="reportsBtn" type="button" role="menuitem">דיווחים<span id="repBadge" class="req-badge hidden">0</span></button>
+          </div>
+        </span>
+        <!-- identity + logout, folded into one menu (logout used to wrap onto its own line) -->
+        <span id="userMenu" class="nav-menu hidden">
+          <button id="userMenuBtn" class="nav-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">
+            <span id="userMenuName"></span><span id="userMenuTag"></span> <span class="caret">▾</span>
+          </button>
+          <div id="userDrop" class="nav-drop hidden" role="menu">
+            <button class="nav-drop-item" id="myProfileBtn" type="button" role="menuitem">הפרופיל שלי</button>
+            <div class="nav-drop-sep"></div>
+            <button class="nav-drop-item danger" id="logoutBtn" type="button" role="menuitem">יציאה</button>
+          </div>
+        </span>
         <span id="authSlot"></span>
         <a href="index.html" class="home">⌂ לדף הבית</a>
       </div>
@@ -677,6 +731,7 @@
         <div class="head-top">
           <div class="head-right">
             <h1 id="listTitle">כל הנושאים</h1>
+            <span id="onlineChip" class="online-chip hidden" title=""><span class="online-dot"></span><b id="onlineCount">0</b> <span class="online-lbl">צופים כעת</span></span>
             <label class="sort-row">מיון:
               <select id="sortSel" class="sort-sel" title="סדר הנושאים">
                 <option value="new">החדש ביותר</option>
@@ -1431,28 +1486,60 @@ async function api(path, opts){
   return data;
 }
 
+// ---- header dropdowns (ניהול / user) ----------------------------------------
+function closeNavMenus(){
+  ["adminMenu","userMenu"].forEach(id => {
+    $(id).classList.remove("open");
+    $(id).querySelector(".nav-drop").classList.add("hidden");
+    $(id).querySelector(".nav-menu-btn").setAttribute("aria-expanded", "false");
+  });
+}
+function toggleNavMenu(id){
+  const menu = $(id), drop = menu.querySelector(".nav-drop");
+  const wasOpen = !drop.classList.contains("hidden");
+  closeNavMenus();                       // only one menu open at a time
+  if (wasOpen) return;
+  menu.classList.add("open");
+  drop.classList.remove("hidden");
+  menu.querySelector(".nav-menu-btn").setAttribute("aria-expanded", "true");
+}
+// The "ניהול" button carries ONE number: the actionable work waiting (pending join requests
+// + open reports). The user COUNT (83) is not actionable, so it stays inside the menu only.
+function updateAdminBadge(){
+  const num = (id) => {
+    const el = $(id);
+    return (el && !el.classList.contains("hidden")) ? (parseInt(el.textContent, 10) || 0) : 0;
+  };
+  const n = num("reqBadge") + num("repBadge");
+  const b = $("adminBadge");
+  b.textContent = n;
+  b.classList.toggle("hidden", n === 0);
+}
+
 // ====== auth ======
+// The header is a fixed set of elements now — renderAuth only shows/hides them and fills in
+// the names. (It used to rebuild loose buttons into #authSlot on every call, which is what
+// overflowed the bar onto a second line once a user was an admin.)
 function renderAuth(){
   const slot = $("authSlot");
   $("bellBtn").classList.toggle("hidden", !me);   // bell only for signed-in users
   $("dmBtn").classList.toggle("hidden", !me);     // private-message inbox only for signed-in users
   if (!me){ setBell(0); setDmBadge(0); setUnreadTopics(0); }
+
+  const staff = atLeast("moderator");
+  $("userMenu").classList.toggle("hidden", !me);
+  $("adminMenu").classList.toggle("hidden", !staff);
+  closeNavMenus();
   if (me){
-    const tag = me.role !== "member"
-      ? ` <span class="role-tag role-${me.role}">${me.role==="admin"?"מנהל":"מודרטור"}</span>` : "";
-    const staffBtns = atLeast("moderator")
-      ? ` <button class="btn btn-ghost btn-sm" id="reportsBtn">דיווחים<span id="repBadge" class="req-badge hidden">0</span></button>`
-      : "";
-    const adminBtns = atLeast("admin")
-      ? ` <button class="btn btn-ghost btn-sm" id="usersBtn">משתמשים<span id="usrCount" class="count-chip hidden">0</span></button>` +
-        ` <button class="btn btn-ghost btn-sm" id="reqBtn">בקשות<span id="reqBadge" class="req-badge hidden">0</span></button>`
-      : "";
-    slot.innerHTML =
-      `<span style="opacity:.9">${esc(me.display_name)}${tag}</span>` + staffBtns + adminBtns +
-      ` <button class="btn btn-ghost btn-sm" id="logoutBtn">יציאה</button>`;
-    $("logoutBtn").onclick = logout;
-    if (atLeast("moderator")){ $("reportsBtn").onclick = openReports; refreshReportBadge(); }
-    if (atLeast("admin")){ $("reqBtn").onclick = openRequests; $("usersBtn").onclick = openUsers; refreshReqBadge(); }
+    $("userMenuName").textContent = me.display_name;
+    $("userMenuTag").textContent = me.role !== "member" ? ROLE_LABEL[me.role] : "";
+    slot.innerHTML = "";
+    // "בקשות" + "משתמשים" are admin-only; a moderator sees only "דיווחים" in the menu.
+    const adminOnly = atLeast("admin");
+    $("reqBtn").classList.toggle("hidden", !adminOnly);
+    $("usersBtn").classList.toggle("hidden", !adminOnly);
+    if (staff) refreshReportBadge();
+    if (adminOnly) refreshReqBadge();
   } else {
     slot.innerHTML = `<button class="btn btn-gold btn-sm" id="loginBtn">התחברות</button>`;
     $("loginBtn").onclick = openAuth;
@@ -1622,6 +1709,7 @@ async function refreshReqBadge(){
       uc.classList.remove("hidden");
     }
   } catch { badge.classList.add("hidden"); }
+  updateAdminBadge();
 }
 
 // ---- reports / moderation queue --------------------------------------------
@@ -1686,6 +1774,7 @@ async function refreshReportBadge(){
     badge.textContent = n;
     badge.classList.toggle("hidden", n === 0);
   } catch { badge.classList.add("hidden"); }
+  updateAdminBadge();
 }
 
 // ---- admin: manage all users ----
@@ -4044,6 +4133,18 @@ $("newTopicBtn").onclick = () => {
 };
 $("addCatBtn").onclick = () => addCategory();
 $("markAllReadBtn").onclick = markAllTopicsRead;
+// header menus — the buttons are static now, so they're wired ONCE (not rebuilt per render)
+$("adminMenuBtn").onclick = (e) => { e.stopPropagation(); toggleNavMenu("adminMenu"); };
+$("userMenuBtn").onclick  = (e) => { e.stopPropagation(); toggleNavMenu("userMenu"); };
+$("reqBtn").onclick     = () => { closeNavMenus(); openRequests(); };
+$("usersBtn").onclick   = () => { closeNavMenus(); openUsers(); };
+$("reportsBtn").onclick = () => { closeNavMenus(); openReports(); };
+$("logoutBtn").onclick  = () => { closeNavMenus(); logout(); };
+$("myProfileBtn").onclick = () => { closeNavMenus(); if (me) openProfile(me.id); };
+document.addEventListener("click", (e) => {   // click anywhere else closes an open menu
+  if (!e.target.closest(".nav-menu")) closeNavMenus();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNavMenus(); });
 $("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
 
 // topic sort selector (persisted)
