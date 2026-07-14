@@ -227,6 +227,9 @@
   .pref-row span{display:flex;flex-direction:column;gap:2px}
   .pref-row small{font-weight:600;font-size:.78rem;color:var(--muted);line-height:1.4}
   .bm-btn.on{background:var(--gold-soft);border-color:var(--gold);color:#3a2c07;font-weight:800}
+  /* «הגב בפרטי» — tinted so it doesn't vanish into a row of identical grey buttons */
+  .pm-btn{background:#eef2fb;border-color:#d6e0f5;color:var(--indigo);font-weight:700}
+  .pm-btn:hover{background:#e2e9f8}
   /* the state marker on a sidebar category row */
   .c-watch{font-size:.78rem;opacity:.75;margin-inline-end:3px}
   .cat.muted .c-txt{opacity:.55}
@@ -3069,6 +3072,11 @@ function postHtml(o, byId){
     actions += `<button class="btn btn-light btn-sm" data-act="reply" data-id="${p.id}">↩ השב</button>`;
     actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}">❝ ציטוט</button>`;
   }
+  // "Reply privately" is a REPLY action, so it belongs next to השב/ציטוט — it used to sit 8th
+  // of 11, buried after the moderation buttons, where nobody found it. A member may only DM
+  // staff, so for a member it appears ONLY on a staff member's post; staff can DM anyone.
+  if (canPost() && !mine && (atLeast("moderator") || RANK_ROLE(p.author_role) >= 2))
+    actions += `<button class="btn btn-light btn-sm pm-btn" data-act="pm" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}" data-pid="${p.id}" title="שלח הודעה פרטית למחבר, בהקשר לתגובה הזו">✉️ הגב בפרטי</button>`;
   if (mine || atLeast("moderator")){
     actions += `<button class="btn btn-light btn-sm" data-act="edit" data-id="${p.id}">ערוך</button>`;
     actions += `<button class="btn btn-light btn-sm" data-act="del" data-id="${p.id}">מחק</button>`;
@@ -3076,10 +3084,6 @@ function postHtml(o, byId){
   actions += `<button class="btn btn-light btn-sm" data-act="link" data-id="${p.id}" title="העתק קישור לתגובה">🔗</button>`;
   if (canPost() && !mine)
     actions += `<button class="btn btn-light btn-sm" data-act="report" data-id="${p.id}" title="דווח על תוכן לא ראוי">🚩</button>`;
-  // "reply privately" → opens a DM to the author. A member may only DM staff, so the button
-  // shows for a member ONLY when the author is staff; staff can privately reply to anyone.
-  if (canPost() && !mine && (atLeast("moderator") || RANK_ROLE(p.author_role) >= 2))
-    actions += `<button class="btn btn-light btn-sm" data-act="pm" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}" data-pid="${p.id}" title="שלח הודעה פרטית למחבר, בהקשר לתגובה הזו">✉️ הגב בפרטי</button>`;
   if (canMarkSolution)
     actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
   if (canPinTopic)
