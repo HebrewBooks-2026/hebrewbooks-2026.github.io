@@ -447,8 +447,17 @@
      It MUST be height-capped: it grows with the content, and an uncapped preview pushed the
      submit button clean off the bottom of the screen (in a modal it went 380px past the
      viewport). Cap + scroll here; modals additionally scroll their body — see .modal-body. */
-  .html-preview{margin-top:8px;border:1px dashed var(--gold);border-radius:10px;background:#fffdf6;
-    padding:8px 12px 12px;max-height:min(45vh,360px);overflow-y:auto}
+  .html-preview{margin-top:0;border:1px dashed var(--gold);border-radius:10px;background:#fffdf6;
+    padding:8px 12px 12px;overflow-y:auto}
+  /* editor + preview side by side. RTL: first child (the textarea) sits RIGHT, preview LEFT. */
+  .compose-split{display:flex;gap:10px;align-items:stretch}
+  .compose-split > textarea{flex:1 1 50%;min-width:0}
+  .compose-split > .html-preview{flex:1 1 50%;min-width:0;max-height:min(60vh,520px)}
+  /* preview hidden (text mode) → the textarea simply takes the full width back */
+  @media (max-width:760px){
+    .compose-split{flex-direction:column}
+    .compose-split > .html-preview{max-height:min(45vh,320px)}
+  }
   /* an action row is a control surface, never a thing to squeeze or scroll away */
   .modal .row-actions{flex:none}
   /* a compose form inside a modal: the FIELDS scroll, the buttons stay put */
@@ -3791,18 +3800,36 @@ function makeToolbar(ta){
   tb.appendChild(tog);
   ta._toolbar = tb;
   ta.parentNode.insertBefore(tb, ta);
-  // live HTML preview, directly under the textarea (visible only in HTML mode)
+  // Live HTML preview, SIDE BY SIDE with the textarea (visible only in HTML mode). The two
+  // sit in a flex row: in RTL the first child lands on the right, so the editor stays right
+  // and the preview renders on the LEFT. It collapses to a stacked column on narrow screens.
   const prev = document.createElement("div");
   prev.className = "html-preview hidden";
   prev.innerHTML = '<div class="html-preview-label">👁 תצוגה מקדימה</div>' +
                    '<div class="post-body html-preview-body"></div>';
-  ta.parentNode.insertBefore(prev, ta.nextSibling);
+  const split = document.createElement("div");
+  split.className = "compose-split";
+  ta.parentNode.insertBefore(split, ta);
+  split.appendChild(ta);      // move the textarea into the row…
+  split.appendChild(prev);    // …with the preview beside it
   ta._preview = prev;
+  ta._split = split;
   setMode(ta, "text");
   enableImagePaste(ta);   // paste an image from the clipboard straight into this box
   enableMention(ta);      // "@" opens the member autocomplete
   ta.addEventListener("focus", refreshPasteBtns);  // re-check the clipboard on entry
   ta.addEventListener("input", () => updatePreview(ta));  // live preview as you type
+  // In HTML mode a bare newline renders as nothing (the browser collapses it), so pressing
+  // Enter would silently do nothing visible. Insert a real <br> instead — that's what the
+  // writer means. Shift+Enter still gives a plain newline, for laying out the SOURCE.
+  ta.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (ta.dataset.mode !== "html") return;
+    if (ta.form && e.isComposing) return;
+    e.preventDefault();
+    insertAtCursor(ta, "<br>\n");
+    updatePreview(ta);   // programmatic edit → "input" doesn't fire
+  });
 }
 // The body we send: HTML-mode posts get the marker prefix so the renderer sanitizes them.
 function composeBody(ta){
