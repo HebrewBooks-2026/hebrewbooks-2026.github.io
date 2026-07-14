@@ -200,6 +200,17 @@
   .nav-drop-item.danger{color:var(--danger)}
   .nav-drop-item.danger:hover{background:#fbeeeb}
   .nav-drop-sep{height:1px;background:var(--line);margin:5px 2px}
+  /* ---- per-category watch menu (4 states, each with a one-line explanation) ---- */
+  .nav-drop.wide{min-width:290px}
+  .nav-drop-item.opt{align-items:flex-start}
+  .nav-drop-item.opt > span{display:flex;flex-direction:column;gap:2px;text-align:start}
+  .nav-drop-item.opt small{font-weight:600;font-size:.76rem;color:var(--muted);line-height:1.35}
+  .nav-drop-item.opt.on{background:var(--gold-soft)}
+  .nav-drop-item.opt.on::after{content:"✓";font-weight:900;color:#3a2c07;margin-inline-start:8px}
+  .cat-watch .caret{font-size:.7rem;opacity:.7}
+  /* the state marker on a sidebar category row */
+  .c-watch{font-size:.78rem;opacity:.75;margin-inline-end:3px}
+  .cat.muted .c-txt{opacity:.55}
   /* the role tag inside the user-menu button */
   #userMenuTag:not(:empty){font-size:.7rem;font-weight:800;border-radius:999px;padding:2px 7px;
     background:var(--gold);color:#3a2c07}
@@ -732,6 +743,23 @@
           <div class="head-right">
             <h1 id="listTitle">כל הנושאים</h1>
             <span id="onlineChip" class="online-chip hidden" title=""><span class="online-dot"></span><b id="onlineCount">0</b> <span class="online-lbl">צופים כעת</span></span>
+            <!-- per-category watch state (only when a category is open, and you're signed in) -->
+            <span id="catWatchMenu" class="nav-menu cat-watch hidden">
+              <button id="catWatchBtn" class="btn btn-light btn-sm" type="button" aria-haspopup="true" aria-expanded="false">
+                <span id="catWatchLabel">מעקב</span> <span class="caret">▾</span>
+              </button>
+              <div id="catWatchDrop" class="nav-drop wide hidden" role="menu">
+                <button class="nav-drop-item opt" data-state="watching" type="button" role="menuitem">
+                  <span><b>🔔 עוקב</b><small>התראה על כל נושא חדש כאן · נספר ב"לא נקראו"</small></span></button>
+                <button class="nav-drop-item opt" data-state="tracking" type="button" role="menuitem">
+                  <span><b>👁 מעקב רגיל</b><small>נספר ב"לא נקראו", בלי התראות · ברירת מחדל</small></span></button>
+                <button class="nav-drop-item opt" data-state="not_watching" type="button" role="menuitem">
+                  <span><b>🔕 לא עוקב</b><small>לא נספר ב"לא נקראו" · עדיין מופיע ברשימה</small></span></button>
+                <div class="nav-drop-sep"></div>
+                <button class="nav-drop-item opt danger" data-state="ignoring" type="button" role="menuitem">
+                  <span><b>🚫 התעלם</b><small>מוסתר מרשימת כל הנושאים ומהפעילות</small></span></button>
+              </div>
+            </span>
             <label class="sort-row">מיון:
               <select id="sortSel" class="sort-sel" title="סדר הנושאים">
                 <option value="new">החדש ביותר</option>
@@ -1488,10 +1516,12 @@ async function api(path, opts){
 
 // ---- header dropdowns (ניהול / user) ----------------------------------------
 function closeNavMenus(){
-  ["adminMenu","userMenu"].forEach(id => {
-    $(id).classList.remove("open");
-    $(id).querySelector(".nav-drop").classList.add("hidden");
-    $(id).querySelector(".nav-menu-btn").setAttribute("aria-expanded", "false");
+  document.querySelectorAll(".nav-menu").forEach(menu => {
+    menu.classList.remove("open");
+    const drop = menu.querySelector(".nav-drop");
+    const btn = menu.querySelector("button");
+    if (drop) drop.classList.add("hidden");
+    if (btn) btn.setAttribute("aria-expanded", "false");
   });
 }
 function toggleNavMenu(id){
@@ -1501,7 +1531,45 @@ function toggleNavMenu(id){
   if (wasOpen) return;
   menu.classList.add("open");
   drop.classList.remove("hidden");
-  menu.querySelector(".nav-menu-btn").setAttribute("aria-expanded", "true");
+  menu.querySelector("button").setAttribute("aria-expanded", "true");
+}
+
+// ---- per-category watch state (watching | tracking | not_watching | ignoring) ----------
+// 'tracking' is the default, so it's what a category with no explicit choice reports.
+const WATCH_LABEL = {
+  watching:     "🔔 עוקב",
+  tracking:     "👁 מעקב רגיל",
+  not_watching: "🔕 לא עוקב",
+  ignoring:     "🚫 מתעלם",
+};
+function catWatchOf(id){
+  const c = cats.find(x => x.id === id);
+  return (c && c.watch) || "tracking";
+}
+// The control only makes sense inside a category, and only when signed in.
+function renderCatWatch(){
+  const menu = $("catWatchMenu");
+  const show = !!me && !!activeCat && !searchQuery;
+  menu.classList.toggle("hidden", !show);
+  if (!show) return;
+  const state = catWatchOf(activeCat);
+  $("catWatchLabel").textContent = WATCH_LABEL[state] || WATCH_LABEL.tracking;
+  menu.querySelectorAll(".opt").forEach(o =>
+    o.classList.toggle("on", o.getAttribute("data-state") === state));
+}
+async function setCatWatch(state){
+  if (!activeCat) return;
+  closeNavMenus();
+  try{
+    const r = await api(`/categories/${activeCat}/watch`, { method:"PATCH", body:{ state }});
+    const c = cats.find(x => x.id === activeCat);
+    if (c) c.watch = r.state;
+    setUnreadTopics(r.unread_topics);
+    renderCatWatch();
+    await loadCategories(cats);   // repaint the sidebar markers (no refetch — cats is current)
+    await loadTopics();           // unread flags / ignored rows change with the state
+    flash(`מצב המעקב לקטגוריה עודכן: ${WATCH_LABEL[r.state]}`, "ok");
+  }catch(e){ flash(e.message, "err"); }
 }
 // The "ניהול" button carries ONE number: the actionable work waiting (pending join requests
 // + open reports). The user COUNT (83) is not actionable, so it stays inside the menu only.
@@ -2353,7 +2421,12 @@ function catRowHtml(c, child){
     ? `${n} ${n === 1 ? "הודעה" : "הודעות"} · פרסום אחרון: ${whenDate(c.last_post_at)}`
     : "אין הודעות";
   const elbow = child ? `<span class="subcat-elbow">↳</span>` : "";
-  const catIco = `${elbow}${c.is_pinned && !child ? "📌" : ""}`;   // pin/elbow → own column
+  // watch-state marker: only for a deliberate, non-default choice (tracking shows nothing)
+  const w = me ? (c.watch || "tracking") : "tracking";
+  const wIco = w === "watching"     ? `<span class="c-watch" title="עוקב — התראה על נושאים חדשים">🔔</span>`
+             : w === "not_watching" ? `<span class="c-watch" title="לא עוקב — לא נספר ב&quot;לא נקראו&quot;">🔕</span>`
+             : w === "ignoring"     ? `<span class="c-watch" title="מתעלם — מוסתר מרשימת כל הנושאים">🚫</span>` : "";
+  const catIco = `${elbow}${c.is_pinned && !child ? "📌" : ""}${wIco}`;   // pin/elbow/watch → own column
   let adminBtns = "";
   if (admin){
     adminBtns = `<span class="cat-admin">`;
@@ -2366,7 +2439,8 @@ function catRowHtml(c, child){
       `<button class="cat-act" data-act="rename" title="שנה שם">✎</button>` +
       `<button class="cat-act" data-act="del" title="מחק קטגוריה">🗑</button></span>`;
   }
-  return `<div class="cat ${child?'subcat ':''}${activeCat===c.id?'active':''}" data-cat="${c.id}">` +
+  const muted = (w === "not_watching" || w === "ignoring") ? "muted " : "";
+  return `<div class="cat ${child?'subcat ':''}${muted}${activeCat===c.id?'active':''}" data-cat="${c.id}">` +
     `<div class="cat-main">` +
       `<span class="cat-name" title="${esc(c.name)}">${catIco ? `<span class="c-ico">${catIco}</span>` : ""}<span class="c-txt">${esc(c.name)}</span></span>` +
       `<span class="cat-date">${metaTxt}</span>` +
@@ -2408,6 +2482,7 @@ async function loadCategories(pre){
 
 // The list heading reflects the search term, the chosen category, or "כל הנושאים".
 function updateListTitle(){
+  renderCatWatch();   // the watch control belongs to whichever category is open
   if (searchQuery){ $("listTitle").textContent = `תוצאות חיפוש: "${searchQuery}"`; return; }
   const cat = activeCat ? cats.find(c => c.id === activeCat) : null;
   $("listTitle").textContent = cat ? cat.name : "כל הנושאים";
@@ -3340,6 +3415,7 @@ function notifText(n){
     case "activity": return { ic:"📋", html:`פעילות חדשה: ${who} ב־${topic}` };
     case "support_dev": return { ic:"🛠️", html:`פנייה בתמיכה דורשת טיפול${n.ticket_title?`: ״${esc(n.ticket_title)}״`:""} (מאת ${who})` };
     case "dm":       return { ic:"✉️", html:`${who} שלח לך הודעה פרטית${n.convo_subject?`: ״${esc(n.convo_subject)}״`:""}` };
+    case "newtopic": return { ic:"🆕", html:`${who} פתח נושא חדש בקטגוריה שאתה עוקב אחריה: ${topic}` };
     default:         return { ic:"🔔", html:`${who} · ${topic}` };
   }
 }
@@ -4135,6 +4211,9 @@ $("addCatBtn").onclick = () => addCategory();
 $("markAllReadBtn").onclick = markAllTopicsRead;
 // header menus — the buttons are static now, so they're wired ONCE (not rebuilt per render)
 $("adminMenuBtn").onclick = (e) => { e.stopPropagation(); toggleNavMenu("adminMenu"); };
+$("catWatchBtn").onclick  = (e) => { e.stopPropagation(); toggleNavMenu("catWatchMenu"); };
+$("catWatchMenu").querySelectorAll(".opt").forEach(o =>
+  o.onclick = () => setCatWatch(o.getAttribute("data-state")));
 $("userMenuBtn").onclick  = (e) => { e.stopPropagation(); toggleNavMenu("userMenu"); };
 $("reqBtn").onclick     = () => { closeNavMenus(); openRequests(); };
 $("usersBtn").onclick   = () => { closeNavMenus(); openUsers(); };
