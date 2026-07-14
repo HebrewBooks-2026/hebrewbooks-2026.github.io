@@ -208,6 +208,11 @@
   .nav-drop-item.opt.on{background:var(--gold-soft)}
   .nav-drop-item.opt.on::after{content:"✓";font-weight:900;color:#3a2c07;margin-inline-start:8px}
   .cat-watch .caret{font-size:.7rem;opacity:.7}
+  /* "this DM came from a post" context line */
+  .dm-source{margin:0 0 10px;padding:9px 13px;border-radius:10px;background:var(--parch2);
+    border:1px solid var(--line);font-size:.86rem;line-height:1.5;color:var(--ink)}
+  .dm-source .dm-src-quote{color:var(--muted);font-style:italic;margin-top:3px}
+  .dm-source a{color:var(--indigo);font-weight:700;text-decoration:underline;cursor:pointer}
   /* draft banner on an unpublished topic */
   .draft-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
     margin:0 0 12px;padding:11px 16px;border-radius:11px;background:var(--parch2);
@@ -1188,6 +1193,7 @@
       <form id="newDmForm" class="support-newform hidden">
         <!-- fields scroll; the action row below stays PINNED. In HTML mode the live preview
              under #dmBody grows, and without this it pushed «שלח» clean out of the modal. -->
+        <div id="dmSourceNote" class="dm-source hidden">↩ ההודעה תישלח <b>בהקשר לתגובה</b> שממנה הגעת — הנמען יראה איזו.</div>
         <div class="compose-fields">
         <div>
           <label class="fld">אל</label>
@@ -1228,6 +1234,7 @@
         <button id="dmAddBtn" class="btn btn-light btn-sm hidden" type="button" title="צרף משתתף לשיחה">＋ צרף משתתף</button>
       </div>
       <div id="dmOversightNote" class="support-blocked-note hidden">🔎 מצב פיקוח — צפייה בלבד. אינך משתתף בשיחה זו.</div>
+      <div id="dmSourceBanner" class="dm-source hidden"></div>
       <div id="dmMessages" class="support-msgs"></div>
       <form id="dmReplyForm" class="support-reply">
         <textarea id="dmReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
@@ -1278,6 +1285,7 @@ let dmPollTimer = null;     // polls an open conversation for new messages
 let dmSig = "";             // last-rendered chat signature (skip idle re-renders)
 let dmToSel = [];           // selected recipients for the new-conversation picker [{id,display_name,role}]
 let dmToTimer = null;       // debounce handle for the recipient typeahead
+let dmSourcePost = null;    // the post «הגב בפרטי» was clicked on (context for a new convo)
 
 // ====== helpers ======
 const $ = (id) => document.getElementById(id);
@@ -2256,6 +2264,8 @@ function showNewDmForm(prefill){
 }
 function hideNewDmForm(){ $("newDmForm").classList.add("hidden"); $("dmToPop").classList.add("hidden"); }
 function resetNewDmForm(){
+  dmSourcePost = null;
+  $("dmSourceNote").classList.add("hidden");
   dmToSel = []; renderDmChips();
   $("dmToInput").value = ""; $("dmSubject").value = ""; $("dmBody").value = "";
   setMode($("dmBody"), "text");   // reset the rich-text editor to plain-text (also clears the live preview)
@@ -2296,7 +2306,9 @@ async function submitNewDm(){
   const body = composeBody(ta);   // HTML-mode messages get the marker prefix so renderBody sanitize-renders them
   const btn = $("dmSend"); btn.disabled = true;
   try{
-    const r = await api("/dm", { method:"POST", body:{ to: dmToSel.map(u => u.id), subject: $("dmSubject").value.trim(), body }});
+    const r = await api("/dm", { method:"POST", body:{ to: dmToSel.map(u => u.id),
+      subject: $("dmSubject").value.trim(), body, source_post_id: dmSourcePost }});
+    dmSourcePost = null;
     hideNewDmForm();
     await loadConversations();
     openConversation(r.conversation_id);
@@ -2335,6 +2347,19 @@ function renderConvoChat(data){
     `<span class="dm-part ${RANK_ROLE(p.role)>=2?'staff':''}">${esc(p.display_name)}</span>`).join("");
   $("dmAddBtn").classList.toggle("hidden", !data.can_add);
   $("dmOversightNote").classList.toggle("hidden", !data.oversight);
+  // "this conversation started from a post" — shown to BOTH sides, so the recipient
+  // immediately understands why they were messaged. Clicking jumps to the post.
+  const sb = $("dmSourceBanner"), src = data.source;
+  sb.classList.toggle("hidden", !src);
+  if (src){
+    sb.innerHTML = `↩ בהמשך ל<a data-src-post="1">תגובה של ${esc(src.post_author)}</a> בנושא «<b>${esc(src.topic_title)}</b>»` +
+      (src.snippet ? `<div class="dm-src-quote">״${esc(src.snippet)}״</div>` : "");
+    sb.querySelector("[data-src-post]").onclick = () => {
+      closeDm();
+      history.pushState(null, "", `#topic=${src.topic_id}&post=${src.post_id}`);
+      routeFromHash();
+    };
+  }
   $("dmReplyForm").classList.toggle("hidden", !data.can_post);
   const box = $("dmMessages");
   box.innerHTML = (data.messages||[]).map(m => {
@@ -2393,11 +2418,16 @@ async function addDmParticipant(){
   }catch(e){ flash(e.message, "err"); }
 }
 // "reply privately" from a post — opens the DM window with the author pre-selected.
-async function startPmWith(uid, name, role){
+async function startPmWith(uid, name, role, postId){
   if (!me){ openAuth(); return; }
+  dmSourcePost = postId || null;   // carried into the new conversation as its context
   if (location.hash !== "#dm") history.pushState(null, "", "#dm");
   await openDm();
   showNewDmForm({ id: uid, display_name: name, role: role || "member" });
+  if (dmSourcePost){
+    $("dmSourceNote").classList.remove("hidden");
+    $("dmSubject").value = $("dmSubject").value || (curTopic ? curTopic.title : "");
+  }
 }
 function startDmPoll(id){
   stopDmPoll();
@@ -3049,7 +3079,7 @@ function postHtml(o, byId){
   // "reply privately" → opens a DM to the author. A member may only DM staff, so the button
   // shows for a member ONLY when the author is staff; staff can privately reply to anyone.
   if (canPost() && !mine && (atLeast("moderator") || RANK_ROLE(p.author_role) >= 2))
-    actions += `<button class="btn btn-light btn-sm" data-act="pm" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}" title="שלח הודעה פרטית למחבר">✉️ הגב בפרטי</button>`;
+    actions += `<button class="btn btn-light btn-sm" data-act="pm" data-uid="${p.user_id}" data-name="${esc(p.author)}" data-role="${p.author_role||'member'}" data-pid="${p.id}" title="שלח הודעה פרטית למחבר, בהקשר לתגובה הזו">✉️ הגב בפרטי</button>`;
   if (canMarkSolution)
     actions += `<button class="btn btn-light btn-sm sol-btn ${isSolution?'on':''}" data-act="solution" data-id="${p.id}">${isSolution?"בטל סימון פתרון":"✓ סמן כפתרון"}</button>`;
   if (canPinTopic)
@@ -3104,7 +3134,7 @@ function wirePostActions(){
     if (act === "reply") return setReplyTo(id);
     if (act === "quote") return quotePost(id);
     if (act === "report") return reportPost(id);
-    if (act === "pm") return startPmWith(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"));
+    if (act === "pm") return startPmWith(parseInt(el.getAttribute("data-uid"),10), el.getAttribute("data-name"), el.getAttribute("data-role"), parseInt(el.getAttribute("data-pid"),10));
     if (act === "gotopost") return jumpToPost(id);
     if (act === "toggle") return toggleCollapse(id);
     if (act === "solution") return markSolution(id);
@@ -3719,6 +3749,25 @@ const HTML_FMT_BTNS = [
 ];
 // Toolbar buttons keyed for the keyboard-shortcut handler (formatShortcuts).
 const FMT_BY_KEY = Object.fromEntries(HTML_FMT_BTNS.map((b) => [b.key, b]));
+// Embed a code block inside an HTML-mode post. The paste box is the point: you drop raw code
+// in (tags, quotes, ampersands — anything), and it is HTML-ESCAPED on the way into
+// <pre><code>…</code></pre>, so it DISPLAYS as text instead of being parsed as markup.
+// Escaping by hand is exactly the "תגים מורכבים" chore this removes.
+async function insertHtmlCodeBlock(ta){
+  const s = ta.selectionStart ?? 0, e = ta.selectionEnd ?? 0;
+  const pre = ta.value.slice(s, e);   // a selection pre-fills the box
+  const r = await openModal({
+    title: "הטמעת קטע קוד",
+    bodyHTML: `<p class="modal-msg">הדבק כאן את הקוד. הוא יוטמע כבלוק קוד, והתגיות יוצגו כטקסט — אין צורך להבריח (escape) שום דבר בעצמך.</p>` +
+              `<textarea class="in" data-field="code" style="min-height:150px;direction:ltr;text-align:left;font-family:Consolas,monospace">${esc(pre)}</textarea>`,
+    okText: "הטמע",
+  });
+  if (!r || !r.code || !r.code.trim()) return;
+  const escaped = esc(r.code.replace(/\r\n/g, "\n").replace(/\s+$/, ""));
+  replaceRange(ta, s, e, "<pre><code>" + escaped + "</code></pre>\n");
+  updatePreview(ta);
+}
+
 function wrapSelection(ta, before, after){
   ta.focus();
   const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
@@ -3752,16 +3801,25 @@ function updatePreview(ta){
                     : '<span class="html-preview-empty">התצוגה המקדימה תופיע כאן…</span>';
 }
 function applyFormat(ta, b){
+  const inHtml = ta.dataset.mode === "html";
   if (b.code){
-    // code lives in TEXT mode — renderBody turns ```…``` into an LTR <pre> block, and
-    // escaping happens there, so code containing <, >, & stays intact.
+    // In HTML mode ```…``` is NOT processed (renderBody only does markdown in text mode), and
+    // the button used to silently switch you BACK to text mode — losing your HTML. So here it
+    // opens a paste box and emits a real <pre><code> block with the code HTML-ESCAPED, which
+    // is the whole point: you can paste tags and they show as TEXT instead of being rendered.
+    if (inHtml){ insertHtmlCodeBlock(ta); return; }
     setMode(ta, "text");
     wrapSelection(ta, "```\n", "\n```");
     return;
   }
   if (b.spoiler){
-    // spoiler also lives in TEXT mode: renderBody turns [spoiler]…[/spoiler] into a
-    // collapsed <details>. Keeps the user in plain text and the syntax stays editable.
+    // Same story: [spoiler]…[/spoiler] is a text-mode form. In HTML mode emit the real tags
+    // (DETAILS/SUMMARY are on the sanitizer's allow-list) instead of kicking the user out.
+    if (inHtml){
+      wrapSelection(ta, "<details><summary>🙈 ספוילר</summary><div>\n", "\n</div></details>");
+      updatePreview(ta);
+      return;
+    }
     setMode(ta, "text");
     wrapSelection(ta, "[spoiler]\n", "\n[/spoiler]");
     return;
