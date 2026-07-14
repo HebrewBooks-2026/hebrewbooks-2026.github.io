@@ -208,6 +208,14 @@
   .nav-drop-item.opt.on{background:var(--gold-soft)}
   .nav-drop-item.opt.on::after{content:"✓";font-weight:900;color:#3a2c07;margin-inline-start:8px}
   .cat-watch .caret{font-size:.7rem;opacity:.7}
+  /* notification-preferences rows */
+  .pref-row{display:flex;align-items:flex-start;gap:11px;padding:11px 4px;cursor:pointer;
+    border-bottom:1px solid var(--line)}
+  .pref-row:last-child{border-bottom:none}
+  .pref-row input{margin-top:3px;width:17px;height:17px;flex:none;accent-color:var(--gold)}
+  .pref-row span{display:flex;flex-direction:column;gap:2px}
+  .pref-row small{font-weight:600;font-size:.78rem;color:var(--muted);line-height:1.4}
+  .bm-btn.on{background:var(--gold-soft);border-color:var(--gold);color:#3a2c07;font-weight:800}
   /* the state marker on a sidebar category row */
   .c-watch{font-size:.78rem;opacity:.75;margin-inline-end:3px}
   .cat.muted .c-txt{opacity:.55}
@@ -715,6 +723,7 @@
           </button>
           <div id="userDrop" class="nav-drop hidden" role="menu">
             <button class="nav-drop-item" id="myProfileBtn" type="button" role="menuitem">הפרופיל שלי</button>
+            <button class="nav-drop-item" id="notifPrefsBtn" type="button" role="menuitem">הגדרות התראות</button>
             <div class="nav-drop-sep"></div>
             <button class="nav-drop-item danger" id="logoutBtn" type="button" role="menuitem">יציאה</button>
           </div>
@@ -775,6 +784,8 @@
         <div id="topicFilters" class="topic-filters">
           <button class="filter-pill on" data-filter="">הכל</button>
           <button class="filter-pill hidden" data-filter="unread" id="unreadPill">לא נקראו<span id="unreadPillCount" class="req-badge hidden">0</span></button>
+          <button class="filter-pill hidden me-only" data-filter="following">🔔 במעקב</button>
+          <button class="filter-pill hidden me-only" data-filter="bookmarked">★ שמורים</button>
           <button class="filter-pill" data-filter="unanswered">ללא מענה</button>
           <button class="filter-pill" data-filter="unsolved">לא נפתרו</button>
           <button id="markAllReadBtn" class="btn btn-ghost btn-sm hidden" type="button" title="סמן את כל הנושאים כנקראו">✓ סמן הכל כנקרא</button>
@@ -947,7 +958,21 @@
   <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
     <h2>התראות</h2>
     <div id="notifList" class="modal-body"></div>
+    <button id="notifMore" class="btn btn-light hidden" type="button" style="width:100%;margin-top:10px">טען עוד התראות</button>
     <div class="modal-actions"><button id="notifReadAll" class="btn btn-light" type="button">סמן הכל כנקרא</button><button id="notifClose" class="btn btn-light" type="button">סגור</button></div>
+  </div>
+</div>
+
+<!-- notification preferences: turn OFF the noisy types (reply/mention/DM are always on) -->
+<div id="notifPrefsOverlay" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
+    <h2>הגדרות התראות</h2>
+    <p class="support-intro">בחר אילו התראות לקבל. התראות על <b>תגובה ישירה, אזכור שלך, הודעה פרטית וסימון פתרון</b> נשלחות תמיד — הן חשובות מכדי לכבות.</p>
+    <div id="notifPrefsList" class="modal-body"></div>
+    <div class="modal-actions">
+      <button id="notifPrefsSave" class="btn btn-gold" type="button">שמור</button>
+      <button id="notifPrefsClose" class="btn btn-light" type="button">ביטול</button>
+    </div>
   </div>
 </div>
 
@@ -1595,6 +1620,7 @@ function renderAuth(){
   if (!me){ setBell(0); setDmBadge(0); setUnreadTopics(0); }
 
   const staff = atLeast("moderator");
+  document.querySelectorAll(".me-only").forEach(el => el.classList.toggle("hidden", !me));
   $("userMenu").classList.toggle("hidden", !me);
   $("adminMenu").classList.toggle("hidden", !staff);
   closeNavMenus();
@@ -2489,6 +2515,52 @@ function updateListTitle(){
 }
 // pre: a {topics:[...]} payload already fetched (e.g. by /bootstrap) — skips the
 // round-trip. Only the default view (no category / sort=new / no search) is pre-fed.
+// ---- bookmarks ("save for later") ------------------------------------------
+async function toggleBookmark(topicId){
+  try{
+    const r = await api(`/topics/${topicId}/bookmark`, { method:"POST" });
+    if (curTopic) curTopic.bookmarked = r.bookmarked ? 1 : 0;
+    const btn = $("bookmarkBtn");
+    if (btn){ btn.classList.toggle("on", r.bookmarked); btn.textContent = r.bookmarked ? "★ שמור" : "☆ שמור"; }
+    flash(r.bookmarked ? "הנושא נשמר. תמצא אותו במסנן «★ שמורים»." : "הנושא הוסר מהשמורים.", "ok");
+  }catch(e){ flash(e.message, "err"); }
+}
+
+// ---- notification preferences ----------------------------------------------
+// Only the low-signal types are mutable; the server enforces the same whitelist.
+const NOTIF_PREF_LABEL = {
+  like:     { ic:"👍", t:"לייקים",              d:"מישהו סימן לייק לתגובה שלך" },
+  react:    { ic:"😀", t:"ריאקשנים",            d:"מישהו הגיב עם אימוג'י לתגובה שלך" },
+  activity: { ic:"📋", t:"כל פעילות באתר",      d:"כל הודעה חדשה בפורום (רק אם הפעלת «עקוב אחרי הכל»)" },
+  newtopic: { ic:"🆕", t:"נושא חדש בקטגוריה במעקב", d:"נפתח נושא בקטגוריה שסימנת «עוקב»" },
+};
+function openNotifPrefs(){
+  if (!me) return;
+  const mutable = me.notif_mutable || Object.keys(NOTIF_PREF_LABEL);
+  const muted = me.notif_mute || [];
+  $("notifPrefsList").innerHTML = mutable.map(k => {
+    const L = NOTIF_PREF_LABEL[k] || { ic:"🔔", t:k, d:"" };
+    return `<label class="pref-row">
+      <input type="checkbox" data-type="${k}" ${muted.includes(k) ? "" : "checked"}>
+      <span><b>${L.ic} ${esc(L.t)}</b><small>${esc(L.d)}</small></span>
+    </label>`;
+  }).join("");
+  $("notifPrefsOverlay").classList.remove("hidden");
+}
+function closeNotifPrefs(){ $("notifPrefsOverlay").classList.add("hidden"); }
+async function saveNotifPrefs(){
+  // a box that is UNCHECKED means "mute this type"
+  const mute = [...$("notifPrefsList").querySelectorAll("input[type=checkbox]")]
+    .filter(c => !c.checked).map(c => c.getAttribute("data-type"));
+  try{
+    const r = await api("/me/notif-prefs", { method:"PATCH", body:{ mute }});
+    me.notif_mute = r.mute;
+    closeNotifPrefs();
+    flash(r.mute.length ? "ההעדפות נשמרו." : "ההעדפות נשמרו — כל ההתראות פעילות.", "ok");
+    refreshBell();
+  }catch(e){ flash(e.message, "err"); }
+}
+
 // ---- presence: "N צופים כעת" -----------------------------------------------
 // A 60s heartbeat (signed in or not) keeps one row alive per viewer; the server counts
 // anyone seen in the last 150s. Guests get a random id minted once per browser — it holds
@@ -2762,7 +2834,8 @@ async function openTopic(id, opts){
   const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
   let modHtml = `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
   if (canPost())
-    modHtml += `<button class="btn btn-light btn-sm follow-btn ${t.following?'on':''}" id="followBtn">${t.following?"✓ עוקב":"🔔 עקוב"}</button>`;
+    modHtml += `<button class="btn btn-light btn-sm follow-btn ${t.following?'on':''}" id="followBtn">${t.following?"✓ עוקב":"🔔 עקוב"}</button>` +
+               `<button class="btn btn-light btn-sm bm-btn ${t.bookmarked?'on':''}" id="bookmarkBtn" title="שמור לקריאה מאוחרת">${t.bookmarked?"★ שמור":"☆ שמור"}</button>`;
   if (canEditTitle) modHtml += `<button class="btn btn-light btn-sm" id="editTitleBtn">✎ ערוך כותרת</button>`;
   if (atLeast("admin"))
     modHtml += `<button class="btn btn-light btn-sm" id="pinBtn">${t.is_pinned?"בטל נעיצה":"📌 נעץ"}</button>`;
@@ -2772,7 +2845,10 @@ async function openTopic(id, opts){
                `<button class="btn btn-danger btn-sm" id="delTopicBtn">מחק נושא</button>`;
   mod.innerHTML = modHtml;
   $("shareBtn").onclick = () => shareTopic(id, $("shareBtn"));
-  if (canPost()) $("followBtn").onclick = () => toggleFollow(id);
+  if (canPost()){
+    $("followBtn").onclick = () => toggleFollow(id);
+    $("bookmarkBtn").onclick = () => toggleBookmark(id);
+  }
   if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
   if (atLeast("admin")) $("pinBtn").onclick = () => modPin(id, !t.is_pinned);
   if (atLeast("moderator")){
@@ -3472,14 +3548,28 @@ function renderNotifList(items){
     }
   });
 }
+// The bell panel is paged now (it used to hard-stop at the newest 40 with no way to see
+// older ones). We accumulate pages client-side so "load more" appends rather than replaces.
+let notifItems = [], notifPage = 1, notifTotal = 0;
 async function openNotifications(){
   $("notifOverlay").classList.remove("hidden");
   $("notifList").innerHTML = `<div class="empty">טוען…</div>`;
+  notifItems = []; notifPage = 1;
+  await loadNotifPage(1);
+}
+async function loadNotifPage(page){
   try{
-    const r = await api("/notifications");
-    renderNotifList(r.notifications);
+    const r = await api("/notifications?page=" + page);
+    notifPage = r.page || page;
+    notifTotal = r.total || 0;
+    notifItems = page === 1 ? r.notifications : notifItems.concat(r.notifications);
+    renderNotifList(notifItems);
     setBell(r.unread);   // opening the panel does NOT clear anything; the badge stays truthful
-  } catch(e){ $("notifList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    $("notifMore").classList.toggle("hidden", notifItems.length >= notifTotal);
+  } catch(e){
+    if (page === 1) $("notifList").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+    else flash(e.message, "err");
+  }
 }
 function closeNotifications(){ $("notifOverlay").classList.add("hidden"); }
 
@@ -4220,6 +4310,11 @@ $("usersBtn").onclick   = () => { closeNavMenus(); openUsers(); };
 $("reportsBtn").onclick = () => { closeNavMenus(); openReports(); };
 $("logoutBtn").onclick  = () => { closeNavMenus(); logout(); };
 $("myProfileBtn").onclick = () => { closeNavMenus(); if (me) openProfile(me.id); };
+$("notifPrefsBtn").onclick = () => { closeNavMenus(); openNotifPrefs(); };
+$("notifPrefsSave").onclick = saveNotifPrefs;
+$("notifPrefsClose").onclick = closeNotifPrefs;
+$("notifPrefsOverlay").onclick = (e) => { if (e.target === $("notifPrefsOverlay")) closeNotifPrefs(); };
+$("notifMore").onclick = () => loadNotifPage(notifPage + 1);
 document.addEventListener("click", (e) => {   // click anywhere else closes an open menu
   if (!e.target.closest(".nav-menu")) closeNavMenus();
 });
@@ -4446,7 +4541,7 @@ $("profileOverlay").onclick = (e) => { if (e.target === $("profileOverlay")) clo
 $("notifClose").onclick = closeNotifications;
 $("notifReadAll").onclick = async () => {
   try{ const r = await api("/notifications/read", { method:"POST" }); setBell(r.unread); }catch{}
-  try{ const r = await api("/notifications"); renderNotifList(r.notifications); }catch{}
+  await loadNotifPage(1);   // reload from page 1 (the panel is paged; don't drop to a stale view)
 };
 $("notifOverlay").onclick = (e) => { if (e.target === $("notifOverlay")) closeNotifications(); };
 // ---- auto-refresh: keep the list / open topic live without a manual reload --------
