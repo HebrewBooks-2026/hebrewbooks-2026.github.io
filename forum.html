@@ -208,6 +208,12 @@
   .nav-drop-item.opt.on{background:var(--gold-soft)}
   .nav-drop-item.opt.on::after{content:"✓";font-weight:900;color:#3a2c07;margin-inline-start:8px}
   .cat-watch .caret{font-size:.7rem;opacity:.7}
+  /* draft banner on an unpublished topic */
+  .draft-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    margin:0 0 12px;padding:11px 16px;border-radius:11px;background:var(--parch2);
+    border:1px dashed var(--muted);color:var(--ink);font-weight:600}
+  .draft-tag{font-size:.72rem;font-weight:800;border-radius:999px;padding:2px 9px;
+    background:var(--parch2);border:1px dashed var(--muted);color:var(--muted);margin-inline-start:6px}
   /* notification-preferences rows */
   .pref-row{display:flex;align-items:flex-start;gap:11px;padding:11px 4px;cursor:pointer;
     border-bottom:1px solid var(--line)}
@@ -796,6 +802,7 @@
           <button class="filter-pill hidden" data-filter="unread" id="unreadPill">לא נקראו<span id="unreadPillCount" class="req-badge hidden">0</span></button>
           <button class="filter-pill hidden me-only" data-filter="following">🔔 במעקב</button>
           <button class="filter-pill hidden me-only" data-filter="bookmarked">★ שמורים</button>
+          <button class="filter-pill hidden me-only" data-filter="drafts">📝 טיוטות</button>
           <button class="filter-pill" data-filter="unanswered">ללא מענה</button>
           <button class="filter-pill" data-filter="unsolved">לא נפתרו</button>
           <button id="markAllReadBtn" class="btn btn-ghost btn-sm hidden" type="button" title="סמן את כל הנושאים כנקראו">✓ סמן הכל כנקרא</button>
@@ -818,6 +825,10 @@
         <h1 id="topicTitle"></h1>
         <div id="topicMod" class="row-actions"></div>
       </div>
+    </div>
+    <div id="draftBanner" class="draft-banner hidden">
+      <span>📝 <b>זו טיוטה</b> — היא מוסתרת מכולם, ואיש לא קיבל עליה התראה. פרסם כשתהיה מוכן.</span>
+      <button id="publishDraftBtn" class="btn btn-gold btn-sm" type="button">🚀 פרסם עכשיו</button>
     </div>
     <button id="unreadJump" class="unread-jump hidden" type="button"></button>
     <div id="posts" class="card"></div>
@@ -862,6 +873,7 @@
         <div class="compose-policy">⚠ בפרסום אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit">פרסם נושא</button>
+          <button class="btn btn-light" type="button" id="newDraftBtn" title="שמור בלי לפרסם — רק אתה תראה את זה">📝 שמור כטיוטה</button>
           <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
           <button class="btn btn-light file-attach-btn hidden" type="button" id="newFileBtn">📎 קובץ</button>
           <button class="btn btn-light" type="button" id="newLinkBtn">🔗 קישור</button>
@@ -2661,7 +2673,7 @@ async function loadTopics(pre){
     <div class="topic-row${t.unread?' unread':''}" data-id="${t.id}">
       ${t.unread?'<span class="t-dot" title="יש כאן תוכן שלא קראת"></span>':''}
       <div>
-        <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
+        <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.is_draft?'<span class="draft-tag">📝 טיוטה</span>':''}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
@@ -2889,6 +2901,10 @@ async function openTopic(id, opts){
   // was BEFORE this visit (it advances it right after), so this is the one moment we can
   // compute it. Only offered when we're landing on page 1 with no explicit deep-link anchor
   // — an anchor/pager move already says where the reader wants to be. Own posts don't count.
+  // draft banner — only the author can even reach a draft, so no extra check is needed here
+  const isDraft = !!t.is_draft;
+  $("draftBanner").classList.toggle("hidden", !isDraft);
+
   const jump = $("unreadJump");
   jump.classList.add("hidden");
   if (me && !anchor && !opts.page){
@@ -3628,19 +3644,33 @@ async function openProfile(uid){
 function closeProfile(){ $("profileOverlay").classList.add("hidden"); }
 
 // ====== writes ======
-async function submitNewTopic(){
+// draft=true saves it privately and notifies nobody; it can be published later.
+async function submitNewTopic(draft){
   try{
     const r = await api("/topics", { method:"POST", body:{
       category_id: parseInt($("newCat").value,10),
       title: $("newTitle").value,
       body: composeBody($("newBody")),
+      draft: !!draft,
     }});
     $("newTitle").value = ""; $("newBody").value = ""; setMode($("newBody"), "text");
     clearNewDraft();
-    flash("הנושא פורסם.", "ok");
+    flash(draft ? "נשמר כטיוטה. רק אתה רואה אותה — תמצא אותה תחת «📝 טיוטות»." : "הנושא פורסם.", "ok");
     await loadCategories(); await loadTopics();
     goTopic(r.topic_id);
   } catch(e){ flash(e.message, "err"); }
+}
+// Publish the draft you're currently viewing. THIS is when everyone else finds out about it.
+async function publishDraft(){
+  if (!curTopicId) return;
+  if (!await confirmDialog("פרסום הטיוטה",
+      "הנושא יהפוך לגלוי לכולם, ותישלחנה התראות למי שעוקב. להמשיך?", "פרסם", false)) return;
+  try{
+    await api(`/topics/${curTopicId}/publish`, { method:"POST" });
+    flash("הנושא פורסם! 🚀", "ok");
+    await loadCategories();
+    await openTopic(curTopicId);   // repaint without the draft banner
+  }catch(e){ flash(e.message, "err"); }
 }
 async function submitReply(id){
   try{
@@ -4338,7 +4368,9 @@ document.addEventListener("click", (e) => {   // click anywhere else closes an o
   if (!e.target.closest(".nav-menu")) closeNavMenus();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNavMenus(); });
-$("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(); };
+$("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(false); };
+$("newDraftBtn").onclick = () => submitNewTopic(true);
+$("publishDraftBtn").onclick = publishDraft;
 
 // topic sort selector (persisted)
 $("sortSel").value = sortMode;
