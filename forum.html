@@ -1162,6 +1162,7 @@
         <textarea id="ticketReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="ticketSend">שלח</button>
+          <button class="btn btn-light" type="button" id="ticketResolveBtn"></button>
           <button class="btn btn-light" type="button" id="ticketCloseChat">סגור</button>
         </div>
       </form>
@@ -2140,11 +2141,33 @@ function renderTicketChat(ticket, messages){
       <div>${renderBody(m.body)}</div>
       <div class="s-when">${when(m.created_at)}</div>
     </div>`).join("") +
-    (ticket.status === "needs_dev" ? `<div class="support-thinking">🛠️ הפנייה הועברה למפתח — עדכון יופיע כאן כשתהיה התקדמות.</div>` : "");
+    (ticket.status === "resolved"
+      ? `<div class="support-thinking">✓ הפנייה טופלה ונסגרה. כדי להמשיך — שלח הודעה חדשה או פתח מחדש.</div>`
+      : ticket.status === "needs_dev"
+        ? `<div class="support-thinking">🛠️ הפנייה הועברה למפתח — עדכון יופיע כאן כשתהיה התקדמות.</div>`
+        : "");
   box.scrollTop = box.scrollHeight;
   // owner blocked → no composer; staff can always reply.
   const canReply = atLeast("moderator") || !me.support_blocked;
   $("ticketReplyForm").classList.toggle("hidden", !canReply);
+  // Close/reopen button: everyone who can see the ticket (owner or staff) may toggle it.
+  const rb = $("ticketResolveBtn");
+  if (ticket.status === "resolved"){
+    rb.textContent = "↻ פתח מחדש";
+    rb.onclick = () => setTicketStatus(ticket.id, "open");
+  } else {
+    rb.textContent = "✓ סגור פנייה";
+    rb.onclick = () => setTicketStatus(ticket.id, "resolved");
+  }
+}
+async function setTicketStatus(id, status){
+  const rb = $("ticketResolveBtn"); rb.disabled = true;
+  try{
+    await api("/support/" + id + "/status", { method:"PATCH", body:{ status }});
+    await refreshTicket(id);
+    await loadSupportTickets();   // keep the list badge in sync
+  }catch(e){ flash(e.message, "err"); }
+  finally{ rb.disabled = false; }
 }
 async function sendTicketMessage(){
   const body = $("ticketReplyBody").value.trim();
