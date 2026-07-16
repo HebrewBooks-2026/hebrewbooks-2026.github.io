@@ -2744,6 +2744,7 @@ async function loadTopics(pre){
       </div>
       ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
+      ${t.view_count>0?`<span class="pill" title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
@@ -2893,8 +2894,11 @@ async function openTopic(id, opts){
   opts = opts || {};
   if (id !== curTopicId) collapsed = new Set();   // entering a different topic → expand all
   curTopicId = id;
-  // the server returns ALL posts (threading needs the whole tree); paging is client-side
-  const data = await api("/topics/" + id);
+  // the server returns ALL posts (threading needs the whole tree); paging is client-side.
+  // A genuine navigation INTO the topic counts one view (opts.countView → ?count=1). Repaints
+  // after a reply/lock/pin and page-flips within the topic pass no flag, so they don't inflate
+  // the 👁 count; the 30s poll uses refreshOpenTopicPosts, which never counts either.
+  const data = await api("/topics/" + id + (opts.countView ? "?count=1" : ""));
   const t = data.topic;
   curTopic = t;
   curPosts = data.posts;
@@ -2928,7 +2932,10 @@ async function openTopic(id, opts){
   // topic actions row: share (everyone) + edit-title (author/mod) + pin (admin) + moderation (mod)
   const mod = $("topicMod"); mod.innerHTML = "";
   const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
-  let modHtml = `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
+  let modHtml = t.view_count>0
+    ? `<span class="pill" title="מספר הצפיות בנושא">👁 ${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}</span>`
+    : "";
+  modHtml += `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
   if (canPost())
     modHtml += `<button class="btn btn-light btn-sm follow-btn ${t.following?'on':''}" id="followBtn">${t.following?"✓ עוקב":"🔔 עקוב"}</button>` +
                `<button class="btn btn-light btn-sm bm-btn ${t.bookmarked?'on':''}" id="bookmarkBtn" title="שמור לקריאה מאוחרת">${t.bookmarked?"★ שמור":"☆ שמור"}</button>`;
@@ -4349,7 +4356,7 @@ function goCat(id){
 }
 function goTopic(id){
   if (location.hash !== "#topic=" + id) history.pushState(null, "", "#topic=" + id);
-  openTopic(id);
+  openTopic(id, { countView: true });   // a user-initiated open = one view
 }
 // "Back" from a topic returns to the list, preserving the active category and reflecting
 // it in the URL (#cat=<id>, or clean for "all").
@@ -4422,8 +4429,8 @@ function routeFromHash(){
   if (m){
     const id = parseInt(m[1], 10);
     const pid = (location.hash.match(/[#&]post=(\d+)/) || [])[1];
-    if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id);
-    else if (pid && !document.getElementById("post-" + pid)) openTopic(id);  // anchor on another page → reload
+    if (id !== curTopicId || $("viewTopic").classList.contains("hidden")) openTopic(id, { countView: true });  // deep-link / Back-Forward into a topic = one view
+    else if (pid && !document.getElementById("post-" + pid)) openTopic(id);  // same topic, anchor on another page → reload (not a new view)
     else scrollToHashPost();   // already on this topic, post is on-screen — just jump to it
     return;
   }
