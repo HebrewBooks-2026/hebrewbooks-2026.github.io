@@ -173,6 +173,8 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .activity-row .act-when{color:var(--muted);font-size:.8rem;margin-top:4px}
   .pill{font-size:.78rem;font-weight:700;color:var(--muted);background:var(--parch2);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  /* view count — deliberately understated: plain muted text, no pill background */
+  .t-views{font-size:.82rem;font-weight:600;color:var(--muted);white-space:nowrap;opacity:.75}
   /* ---- header: keep it to ONE row. The brand must never wrap (it used to, which shoved
      the whole nav onto a second line), and the loose buttons are now folded into menus. ---- */
   .brand{white-space:nowrap}
@@ -2740,11 +2742,10 @@ async function loadTopics(pre){
       <div>
         <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.is_draft?'<span class="draft-tag">📝 טיוטה</span>':''}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
-        <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
+        <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}${t.view_count>0?` · <span title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}</div>
       </div>
       ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
-      ${t.view_count>0?`<span class="pill" title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
@@ -2933,7 +2934,7 @@ async function openTopic(id, opts){
   const mod = $("topicMod"); mod.innerHTML = "";
   const canEditTitle = canPost() && me && (me.id === t.user_id || atLeast("moderator"));
   let modHtml = t.view_count>0
-    ? `<span class="pill" title="מספר הצפיות בנושא">👁 ${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}</span>`
+    ? `<span class="t-views" title="מספר הצפיות בנושא">👁 ${t.view_count}</span>`
     : "";
   modHtml += `<button class="btn btn-light btn-sm" id="shareBtn">🔗 העתק קישור</button>`;
   if (canPost())
