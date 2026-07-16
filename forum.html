@@ -2742,10 +2742,11 @@ async function loadTopics(pre){
       <div>
         <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.is_draft?'<span class="draft-tag">📝 טיוטה</span>':''}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
-        <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}${t.view_count>0?` · <span title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}</div>
+        <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
       ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
       <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
+      ${t.view_count>0?`<span class="t-views" title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
