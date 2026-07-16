@@ -136,6 +136,9 @@
   .topic-row:hover{background:#fbf8f0}
   .topic-row .t-title{font-weight:700;font-size:1.08rem}
   .topic-row .t-meta{color:var(--muted);font-size:.86rem;margin-top:3px}
+  /* title fills the row; the counts (הודעות + צפיות) stay grouped together on the left */
+  .topic-row .t-main{flex:1;min-width:0}
+  .topic-row .t-right{display:flex;align-items:center;gap:14px;flex:none}
   /* matched-content preview under a search result; click jumps to that message */
   .topic-row .t-snip{color:var(--ink);font-size:.9rem;margin-top:4px;opacity:.9;cursor:pointer;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
@@ -2739,14 +2742,16 @@ async function loadTopics(pre){
   box.innerHTML = data.topics.map(t => `
     <div class="topic-row${t.unread?' unread':''}" data-id="${t.id}">
       ${t.unread?'<span class="t-dot" title="יש כאן תוכן שלא קראת"></span>':''}
-      <div>
+      <div class="t-main">
         <div class="t-title">${t.is_pinned?'<span class="pin">📌 </span>':''}${t.is_locked?'<span class="lock">🔒 </span>':''}${esc(t.title)}${t.is_draft?'<span class="draft-tag">📝 טיוטה</span>':''}${t.solution_post_id?'<span class="solved-tag">✓ נפתר</span>':''}</div>
         ${t.match_snippet?`<div class="t-snip" data-post="${t.match_post_id}">💬 ${markSnippet(t.match_snippet)}</div>`:''}
         <div class="t-meta">מאת ${esc(t.author)} · עודכן ${when(t.last_post_at)}</div>
       </div>
-      ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
-      <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
-      ${t.view_count>0?`<span class="t-views" title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}
+      <div class="t-right">
+        ${t.new_posts>0?`<span class="pill pill-new">${t.new_posts} חדשות</span>`:''}
+        <span class="pill">${t.reply_count} ${t.reply_count===1?'הודעה':'הודעות'}</span>
+        ${t.view_count>0?`<span class="t-views" title="${t.view_count} ${t.view_count===1?'צפייה':'צפיות'}">👁 ${t.view_count}</span>`:''}
+      </div>
     </div>`).join("");
   box.querySelectorAll(".topic-row").forEach(el =>
     el.onclick = () => goTopic(parseInt(el.getAttribute("data-id"),10)));
