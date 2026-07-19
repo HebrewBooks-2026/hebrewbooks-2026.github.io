@@ -1119,12 +1119,17 @@
         </div>
         <div>
           <label class="fld">פירוט</label>
-          <textarea id="ntBody" class="in" placeholder="שאל את שאלתך, או תאר: מה ניסית לעשות? מה קרה? מה ציפית שיקרה?" required></textarea>
+          <textarea id="ntBody" class="in" placeholder="שאל את שאלתך, או תאר: מה ניסית לעשות? מה קרה? מה ציפית שיקרה?  (אפשר להדביק צילום מסך עם Ctrl+V)" required></textarea>
         </div>
         <div class="support-log-row">
           <button id="ntLogBtn" class="btn btn-light btn-sm" type="button">📄 צרף לוג / ZIP</button>
           <span id="ntLogName" class="support-logname"></span>
           <input id="ntLogInput" type="file" accept=".log,.txt,.zip,text/plain,application/zip" class="hidden">
+          <!-- screenshot / general file attach for the FIRST message (member-allowed, /support/upload-file) -->
+          <button id="ntImgBtn" class="btn btn-light btn-sm" type="button">🖼 צילום מסך</button>
+          <button id="ntFileBtn" class="btn btn-light btn-sm" type="button">📎 קובץ</button>
+          <input id="ntImgInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+          <input id="ntFileInput" type="file" class="hidden">
         </div>
         <details class="support-loghelp">
           <summary>❓ איך מפיקים ומצרפים קובץ לוג?</summary>
@@ -1164,11 +1169,18 @@
       </div>
       <div id="ticketMessages" class="support-msgs"></div>
       <form id="ticketReplyForm" class="support-reply">
-        <textarea id="ticketReplyBody" class="in" placeholder="כתוב הודעה…" required></textarea>
+        <textarea id="ticketReplyBody" class="in" placeholder="כתוב הודעה…  (טיפ: אפשר להדביק צילום מסך ישירות עם Ctrl+V)" required></textarea>
         <div class="row-actions">
           <button class="btn btn-gold" type="submit" id="ticketSend">שלח</button>
+          <!-- attach a screenshot (image) or an arbitrary file to the ticket. The file button is
+               NOT .file-attach-btn on purpose: that class hides it for non-admins, but in support
+               every reporter may attach to their own ticket (server: POST /support/upload-file). -->
+          <button class="btn btn-light" type="button" id="ticketImgBtn">🖼 צילום מסך</button>
+          <button class="btn btn-light" type="button" id="ticketFileBtn">📎 קובץ</button>
           <button class="btn btn-light" type="button" id="ticketResolveBtn"></button>
           <button class="btn btn-light" type="button" id="ticketCloseChat">סגור</button>
+          <input type="file" id="ticketImgInput" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">
+          <input type="file" id="ticketFileInput" class="hidden">
         </div>
       </form>
     </div>
@@ -4012,16 +4024,19 @@ function fmtBytes(n){
   if (n < 1024*1024) return (n/1024).toFixed(n < 10*1024 ? 1 : 0) + " KB";
   return (n/(1024*1024)).toFixed(1) + " MB";
 }
-// Upload one arbitrary file (admin-only on the server) and embed it as a download chip.
-// Mirrors uploadImageFile, but posts to /upload-file and inserts a [name](/file/key) link.
-async function uploadAttachmentFile(file, textarea){
+// Upload one arbitrary file and embed it as a download chip. Mirrors uploadImageFile, but
+// posts to a file endpoint and inserts a [name](/file/key) link. `endpoint` defaults to the
+// admin-only /upload-file (public posts); the support composer passes /support/upload-file,
+// which the server opens to any approved member for their own ticket.
+async function uploadAttachmentFile(file, textarea, endpoint){
   if (!file) return;
+  endpoint = endpoint || "/upload-file";
   setUploadBusy(true);
   const m = $("msg"); m.textContent = "⏳ מעלה קובץ… (ברשת איטית זה עשוי לקחת זמן)"; m.className = "msg show ok";
   try{
     const fd = new FormData(); fd.append("file", file, file.name || "attachment");
     const headers = {}; if (token) headers["Authorization"] = "Bearer " + token;
-    const res = await fetch(API + "/upload-file", { method:"POST", headers, body:fd });
+    const res = await fetch(API + endpoint, { method:"POST", headers, body:fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
     // The chip label carries the original name + size; the /file/ link is what fileTag renders.
@@ -4032,10 +4047,10 @@ async function uploadAttachmentFile(file, textarea){
   } catch(e){ flash(e.message, "err"); }
   finally{ setUploadBusy(false); }
 }
-async function uploadAttachmentAndInsert(input, textarea){
+async function uploadAttachmentAndInsert(input, textarea, endpoint){
   const file = input.files && input.files[0];
   input.value = "";  // allow re-picking the same file later
-  await uploadAttachmentFile(file, textarea);
+  await uploadAttachmentFile(file, textarea, endpoint);
 }
 // Let users paste an image straight from the clipboard into a compose box.
 function enableImagePaste(ta){
@@ -4552,6 +4567,20 @@ $("replyFileBtn").onclick = () => $("replyFileInput").click();
 $("replyFileInput").onchange = () => uploadAttachmentAndInsert($("replyFileInput"), $("replyBody"));
 $("newFileBtn").onclick = () => $("newFileInput").click();
 $("newFileInput").onchange = () => uploadAttachmentAndInsert($("newFileInput"), $("newBody"));
+
+// support ticket composer: screenshots + file attachments for the reporter (not admin-gated).
+// Ctrl+V of a screenshot uploads+embeds via enableImagePaste; the buttons are the click path.
+$("ticketImgBtn").onclick = () => $("ticketImgInput").click();
+$("ticketImgInput").onchange = () => uploadAndInsert($("ticketImgInput"), $("ticketReplyBody"));
+$("ticketFileBtn").onclick = () => $("ticketFileInput").click();
+$("ticketFileInput").onchange = () => uploadAttachmentAndInsert($("ticketFileInput"), $("ticketReplyBody"), "/support/upload-file");
+enableImagePaste($("ticketReplyBody"));
+// …and the same on the NEW-ticket form so the first message can carry a screenshot/file.
+$("ntImgBtn").onclick = () => $("ntImgInput").click();
+$("ntImgInput").onchange = () => uploadAndInsert($("ntImgInput"), $("ntBody"));
+$("ntFileBtn").onclick = () => $("ntFileInput").click();
+$("ntFileInput").onchange = () => uploadAttachmentAndInsert($("ntFileInput"), $("ntBody"), "/support/upload-file");
+enableImagePaste($("ntBody"));
 
 // link insert buttons
 $("replyLinkBtn").onclick = () => insertLink($("replyBody"));
