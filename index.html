@@ -4,8 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HebrewBooks — ארון הספרים הדיגיטלי</title>
-<meta name="description" content="HebrewBooks — ספרייה תורנית דיגיטלית עם חיפוש טקסט מלא חכם בעברית, מציג PDF מובנה, קישורי מסורת הש״ס לחיצים וקישורים אוטומטיים לשמות ספרים בקטלוג. הורדה חינם ל-Windows.">
+<meta name="description" content="HebrewBooks — ספרייה תורנית דיגיטלית עם חיפוש טקסט מלא חכם בעברית, מציג PDF מובנה, קישורי מסורת הש״ס לחיצים וקישורים אוטומטיים לשמות ספרים בקטלוג. הורדה חינם ל-Windows ול-Mac.">
 <link rel="icon" href="favicon.ico" sizes="any">
+<script>
+  /* Stamp the visitor's OS on <html> BEFORE first paint so the download blocks below render
+     in their final form (no Windows-then-Mac flash). CSS does the actual switching; with JS
+     disabled no class is set and the Windows variant — the default — is what shows.
+     iPadOS reports platform "MacIntel", so touch points disambiguate tablet from desktop. */
+  (function(){
+    var ua    = navigator.userAgent || '';
+    var uad   = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+    var plat  = navigator.platform || '';
+    var touch = navigator.maxTouchPoints || 0;
+    var os;
+
+    // ?os=mac|win|mobile forces a variant — for previewing or linking a specific platform.
+    var forced = (location.search.match(/[?&]os=(mac|win|mobile)\b/i) || [])[1];
+
+    if (forced)   os = 'os-' + forced.toLowerCase();
+    // userAgentData.platform is the authoritative signal where it exists (Chromium/Edge):
+    // it reports the real OS even when the UA string says otherwise. Linux/ChromeOS fall
+    // through to the Windows default, which is also the no-JS fallback.
+    else if (uad) os = /mac/i.test(uad) ? 'os-mac' : (/android/i.test(uad) ? 'os-mobile' : 'os-win');
+    // Safari/Firefox path. iPadOS in its default "desktop" mode claims Macintosh/MacIntel,
+    // so touch points are what separate an iPad from a real Mac (Macs report 0).
+    else if (/iPhone|iPod|iPad|Android/i.test(ua))                 os = 'os-mobile';
+    else if (/Mac/i.test(plat) || /Macintosh|Mac OS X/i.test(ua))  os = (touch > 1) ? 'os-mobile' : 'os-mac';
+    else                                                           os = 'os-win';
+
+    document.documentElement.className += ' ' + os;
+  })();
+</script>
 <link rel="apple-touch-icon" href="favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -181,6 +210,44 @@
   .req{text-align:center;color:var(--muted);margin-top:34px;font-size:.95rem}
   .req b{color:var(--ink)}
 
+  /* ---------- OS-aware download switching ----------
+     An inline script in <head> stamps html.os-win / os-mac / os-mobile from the UA before
+     first paint, so the right variant renders immediately with no flash. Every OS-specific
+     block is present in the HTML and hidden by CSS; with JS off nothing is stamped and the
+     Windows variant (the default, un-prefixed rule) is what shows. */
+  .only-mac,.only-mobile{display:none}
+  html.os-mac .only-win,html.os-mobile .only-win{display:none}
+  html.os-mac .only-mac{display:block}
+  html.os-mobile .only-mobile{display:block}
+  /* .badge is an inline-flex pill — keep it one when it's the shown variant */
+  html.os-mac .badge.only-mac,html.os-mobile .badge.only-mobile{display:inline-flex}
+  /* On a phone/tablet the hero leads to the web edition, but the install steps below still
+     describe installing on a computer — show the Windows ones there rather than nothing. */
+  html.os-mobile .steps .only-win{display:block}
+
+  /* The download grid holds 3 cards (2×Windows + Mac); the beta grid still holds 2. */
+  #download .dl-grid{grid-template-columns:repeat(3,1fr);max-width:1120px}
+  @media(max-width:980px){#download .dl-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:780px){#download .dl-grid{grid-template-columns:1fr}}
+  /* On a Mac the Mac card leads and carries the "מומלץ" ring; on Windows it trails. */
+  .dl-card.mac{order:3}
+  html.os-mac .dl-card.mac{order:-1}
+  html.os-mac .dl-card.win-stable{border:1px solid var(--line)}
+  html.os-mac .dl-card.win-stable .pick{display:none}
+  .dl-card.mac{position:relative}
+  .dl-card.mac .pick{display:none;position:absolute;top:-13px;inset-inline-start:30px;
+    background:var(--gold);color:#2b2208;font-weight:800;font-size:.82rem;padding:5px 14px;border-radius:999px}
+  html.os-mac .dl-card.mac{border:2px solid var(--gold)}
+  html.os-mac .dl-card.mac .pick{display:block}
+  /* ...and its button turns gold, matching whichever card is the recommended one */
+  html.os-mac .dl-card.mac .btn-dark{background:linear-gradient(180deg,var(--gold-soft),var(--gold));
+    color:#2b2208;box-shadow:0 10px 26px rgba(202,162,74,.45)}
+  html.os-mac .dl-card.mac .btn-dark:hover{background:linear-gradient(180deg,var(--gold-soft),var(--gold));
+    box-shadow:0 16px 34px rgba(202,162,74,.55)}
+  html.os-mac .dl-card.win-stable .btn-gold{background:var(--navy);color:#fff;box-shadow:var(--shadow)}
+  html.os-mac .dl-card.win-stable .btn-gold:hover{background:var(--navy2)}
+  .dl-card .beta-note{font-size:.86rem;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5}
+
   /* ---------- Order-drive callout ---------- */
   .order{background:radial-gradient(1100px 500px at 80% -20%,rgba(70,108,180,.4) 0,transparent 60%),
               linear-gradient(160deg,var(--navy) 0%,var(--navy2) 60%,#26406e 100%);
@@ -266,21 +333,55 @@
 
     <div class="hero-grid">
       <div class="hero-text">
-        <span class="badge"><span class="dot"></span> גרסה <span id="ver">3.0.62</span> · חינמי · Windows<span id="dlCountBadge"></span></span>
+        <span class="badge only-win"><span class="dot"></span> גרסה <span id="ver">3.0.62</span> · חינמי · Windows<span id="dlCountBadge"></span></span>
+        <span class="badge only-mac"><span class="dot"></span> גרסה <span class="macVer">0.1.0</span> · חינמי · macOS (בטא)</span>
+        <span class="badge only-mobile"><span class="dot"></span> חינמי · זמין גם בדפדפן</span>
         <h1 class="title serif">ארון הספרים <span class="accent">הדיגיטלי</span></h1>
         <p class="lead">ספרייה תורנית שלמה על המחשב — עם חיפוש טקסט מלא חכם בעברית, מציג PDF מהיר, קישורי <b>מסורת הש״ס</b> לחיצים שמדלגים ישר אל הדף המצוטט, וקישורים אוטומטיים לכל אזכור של <b>שם ספר</b> בקטלוג.</p>
-        <div class="cta">
-          <a class="btn btn-gold" id="dlMain" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-stable-Setup.exe">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            הורדה ל-Windows
+
+        <!-- Windows (default — also the JS-off fallback) -->
+        <div class="only-win">
+          <div class="cta">
+            <a class="btn btn-gold" id="dlMain" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-stable-Setup.exe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              הורדה ל-Windows
+            </a>
+            <a class="btn btn-ghost" href="#download">כל אפשרויות ההורדה</a>
+          </div>
+          <a href="#offline" class="offline-note">
+            <span class="offline-ic">⚠</span>
+            <span>מתקינים במחשב <b>ללא אינטרנט</b>? לחצו כאן לגרסה הלא-מקוונת ←</span>
           </a>
-          <a class="btn btn-ghost" href="#download">כל אפשרויות ההורדה</a>
+          <p class="sub-dl">חבילה קומפקטית · מתעדכנת אוטומטית · זמין גם <a href="#download">נייד (Portable)</a></p>
         </div>
-        <a href="#offline" class="offline-note">
-          <span class="offline-ic">⚠</span>
-          <span>מתקינים במחשב <b>ללא אינטרנט</b>? לחצו כאן לגרסה הלא-מקוונת ←</span>
-        </a>
-        <p class="sub-dl">חבילה קומפקטית · מתעדכנת אוטומטית · זמין גם <a href="#download">נייד (Portable)</a></p>
+
+        <!-- macOS -->
+        <div class="only-mac">
+          <div class="cta">
+            <a class="btn btn-gold macDl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/download/prerequisites/HebrewBooks-Mac.dmg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              הורדה ל-Mac
+            </a>
+            <a class="btn btn-ghost" href="#download">כל אפשרויות ההורדה</a>
+          </div>
+          <a href="#download" class="offline-note">
+            <span class="offline-ic">⚠</span>
+            <span>גרסת ה-Mac היא <b>בטא מקוונת</b> — הספרים והחיפוש נטענים מהשרת. לפרטים ←</span>
+          </a>
+          <p class="sub-dl">universal · Intel ו-Apple Silicon · הגרסה המלאה (עם ספרייה מקומית) קיימת כרגע ל-<a href="#download">Windows</a></p>
+        </div>
+
+        <!-- Phones / tablets — neither installer is usable, so lead to the web edition -->
+        <div class="only-mobile">
+          <div class="cta">
+            <a class="btn btn-gold" href="https://hebrewbooks.pages.dev/" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+              למאגר המקוון — בלי התקנה
+            </a>
+            <a class="btn btn-ghost" href="#download">הורדה למחשב</a>
+          </div>
+          <p class="sub-dl">התוכנה עצמה מיועדת למחשב (Windows / Mac) — בטלפון ובטאבלט אפשר להשתמש במאגר המקוון בדפדפן.</p>
+        </div>
       </div>
 
       <div class="hero-mock">
@@ -375,10 +476,10 @@
   <div class="wrap">
     <div class="eyebrow">הורדה</div>
     <h2 class="sec serif">בחר את הגרסה שמתאימה לך</h2>
-    <p class="sec-lead">שתי הגרסאות זהות בתכונות. ההבדל הוא רק באופן ההתקנה של סביבת ההרצה (.NET).<span id="dlCountLead"></span></p>
+    <p class="sec-lead">שתי גרסאות ה-Windows זהות בתכונות — ההבדל הוא רק באופן ההתקנה של סביבת ההרצה (.NET). ל-Mac יש גרסה מקוונת נפרדת.<span id="dlCountLead"></span></p>
 
     <div class="dl-grid">
-      <div class="dl-card rec">
+      <div class="dl-card rec win-stable">
         <span class="pick">מומלץ</span>
         <h3>גרסה רגילה</h3>
         <p class="why">חבילה קטנה ומהירה. אם חסר רכיב .NET היא תוריד אותו אוטומטית בהתקנה. הבחירה הטובה ביותר ברוב המחשבים.</p>
@@ -392,9 +493,22 @@
         <a class="btn btn-dark" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-offline-Setup.exe">⬇ התקנה לא-מקוונת (Setup)</a>
         <p class="alt">או <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/latest/download/HebrewBooks-offline-Portable.zip">גרסה ניידת לא-מקוונת (ZIP)</a></p>
       </div>
+
+      <!-- macOS. Ordered last on Windows and first (with the "מומלץ" ring) on a Mac — see the
+           OS-aware rules in the stylesheet. The .dmg href + the version text are refreshed at
+           runtime from the newest mac-* tag; the values baked in here are the fallback. -->
+      <div class="dl-card mac" id="mac">
+        <span class="pick">מומלץ</span>
+        <h3>גרסה ל-Mac <span style="font-size:.62em;font-weight:600;color:#9a7400">בטא</span></h3>
+        <p class="why">אפליקציית macOS מקורית (universal — Intel ו-Apple Silicon). <b>גרסה מקוונת</b>: החיפוש והספרים נטענים מהשרת, בלי ספרייה מקומית ובלי כונן.</p>
+        <a class="btn btn-dark macDl" href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases/download/prerequisites/HebrewBooks-Mac.dmg">⬇ הורדה ל-Mac (DMG)</a>
+        <p class="alt">גרסה <span class="macVer">0.1.0</span> · universal</p>
+        <p class="beta-note">האפליקציה אינה חתומה — בפתיחה הראשונה יש ללחוץ עליה <b>קליק ימני ← «פתח»</b> כדי לעקוף את Gatekeeper.</p>
+      </div>
     </div>
 
-    <p class="req">דרישות מערכת: <b>Windows 10 / 11</b> · הספרייה (קבצי ה-PDF) מסופקת בנפרד על כונן.
+    <p class="req">דרישות מערכת: <b>Windows 10 / 11</b> — הספרייה (קבצי ה-PDF) מסופקת בנפרד על כונן ·
+      <b>macOS 11+</b> — גרסה מקוונת, לא נדרש כונן.
       &nbsp;·&nbsp; <a href="https://github.com/HebrewBooks-2026/Hebrewbooks-Releases/releases" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:600">כל הגרסאות ←</a></p>
   </div>
 </section>
@@ -418,7 +532,7 @@
      the GitHub releases list has a pre-release. The two download links are populated at
      runtime against the latest pre-release tag. Visually toned down vs the main download
      card (warning amber, smaller buttons) so it doesn't compete for attention with stable. -->
-<section id="download-beta" style="background:#fbf5e8;border-top:1px solid #e7d8a8;border-bottom:1px solid #e7d8a8;display:none">
+<section id="download-beta" class="only-win" style="background:#fbf5e8;border-top:1px solid #e7d8a8;border-bottom:1px solid #e7d8a8;display:none">
   <div class="wrap">
     <div class="eyebrow" style="color:#9a7400">בטא</div>
     <h2 class="sec serif">גרסת בטא <span id="betaVer" style="opacity:0.55;font-size:0.6em;font-weight:400">—</span></h2>
@@ -451,8 +565,10 @@
     <h2 class="sec serif">מתחילים בשלוש דקות</h2>
     <p class="sec-lead">פשוט להוריד ולהריץ — בלי הרשמה ובלי הגדרות מסובכות.</p>
     <div class="steps">
-      <div class="step"><div class="num"></div><h4>הורדה והרצה</h4><p>הורד את קובץ ההתקנה והרץ אותו. אם מערכת ההפעלה מציגה אזהרת "SmartScreen" — לחץ "מידע נוסף" ואז "הפעל בכל זאת".</p></div>
-      <div class="step"><div class="num"></div><h4>חיבור הספרייה</h4><p>חבר את הכונן עם הספרים. בהפעלה הראשונה התוכנה מזהה אותו אוטומטית (או שתבחר את התיקייה פעם אחת).</p></div>
+      <div class="step only-win"><div class="num"></div><h4>הורדה והרצה</h4><p>הורד את קובץ ההתקנה והרץ אותו. אם מערכת ההפעלה מציגה אזהרת "SmartScreen" — לחץ "מידע נוסף" ואז "הפעל בכל זאת".</p></div>
+      <div class="step only-win"><div class="num"></div><h4>חיבור הספרייה</h4><p>חבר את הכונן עם הספרים. בהפעלה הראשונה התוכנה מזהה אותו אוטומטית (או שתבחר את התיקייה פעם אחת).</p></div>
+      <div class="step only-mac"><div class="num"></div><h4>הורדה והתקנה</h4><p>הורד את קובץ ה-DMG, פתח אותו וגרור את האפליקציה אל תיקיית <b>Applications</b>.</p></div>
+      <div class="step only-mac"><div class="num"></div><h4>פתיחה ראשונה</h4><p>האפליקציה אינה חתומה, ולכן בפעם הראשונה יש ללחוץ עליה <b>קליק ימני ← «פתח»</b> ולאשר. לאחר מכן היא נפתחת רגיל. לא נדרש כונן — הכול נטען מהשרת.</p></div>
       <div class="step"><div class="num"></div><h4>ללמוד</h4><p>חפש, פתח ספר, ולחץ על קישורי מסורת הש״ס לדילוג בין סוגיות — או על שם ספר כדי לפתוח אותו ישר מהמראה-מקום. זהו — הספרייה כולה בידיך.</p></div>
     </div>
   </div>
@@ -524,9 +640,31 @@
       var list  = res[1];            // [release, ...] | null
       if (!Array.isArray(list)) return;
 
+      // -- Mac release --
+      // The Mac app ships on its own `mac-*` tags (separate version line from Windows, and
+      // currently pre-release), so it is resolved by tag prefix rather than /releases/latest
+      // — marking a mac-* tag "latest" would break every Windows link, which all resolve
+      // through /releases/latest/download/<asset> (the installed app's updater does too).
+      // Newest first in the API listing; take its .dmg asset. If the call fails the baked-in
+      // href stands: prerequisites/HebrewBooks-Mac.dmg, a fixed name on the never-pruned
+      // `prerequisites` release — re-upload it (gh release upload --clobber) on each Mac
+      // release so the permanent link keeps pointing at the current build.
+      for (var m=0; m<list.length; m++){
+        if (list[m].draft || !/^mac-/i.test(list[m].tag_name || '')) continue;
+        var dmg = (list[m].assets || []).filter(function(a){ return /\.dmg$/i.test(a.name || ''); })[0];
+        if (!dmg) continue;
+        var macV = String(list[m].tag_name).replace(/^mac-v?/i,'');
+        document.querySelectorAll('.macDl').forEach(function(e){ e.href = dmg.browser_download_url; });
+        document.querySelectorAll('.macVer').forEach(function(e){ e.textContent = macV; });
+        break;
+      }
+
       // -- Beta detection --
+      // `mac-*` tags are pre-releases too, but they are a different product line — skipping
+      // them keeps the Windows beta section from pointing at a tag with no Setup.exe.
       var beta = null;
       for (var i=0; i<list.length; i++){
+        if (/^mac-/i.test(list[i].tag_name || '')) continue;
         if (list[i].prerelease && !list[i].draft) { beta = list[i]; break; }
       }
       if (beta) {
@@ -546,13 +684,19 @@
       // ≈ the active user base (everyone pulls each update once), and installs
       // adds fresh users an update has not yet counted. The asset classification
       // MUST match publish.ps1's baseline so the frozen + live halves line up.
+      // A Mac install is a .dmg download, counted alongside the Windows Setup/Portable.
+      // The `prerequisites` release is otherwise excluded (it holds Katalog.db, runtimes
+      // and other non-install payloads), but its permanent HebrewBooks-Mac.dmg IS a real
+      // install and is the link the page falls back to, so .dmg is counted there too.
       var liveInstalls = 0, livePeak = 0;
       list.forEach(function(rel){
-        if (rel.tag_name === 'prerequisites') return;
         if (!Array.isArray(rel.assets)) return;
+        var isPrereq = (rel.tag_name === 'prerequisites');
         var relUpd = 0;
         rel.assets.forEach(function(a){
           var n = a.name || '';
+          if (/\.dmg$/i.test(n)) { liveInstalls += (a.download_count|0); return; }
+          if (isPrereq) return;
           if (/\.nupkg$/i.test(n)) { relUpd += (a.download_count|0); return; }
           if (/Setup\.exe$/i.test(n) || /Portable\.zip$/i.test(n)) { liveInstalls += (a.download_count|0); }
         });
