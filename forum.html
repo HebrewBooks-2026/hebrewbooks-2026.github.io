@@ -2959,6 +2959,12 @@ async function openTopic(id, opts){
     modHtml += `<button class="btn btn-light btn-sm follow-btn ${t.following?'on':''}" id="followBtn">${t.following?"✓ עוקב":"🔔 עקוב"}</button>` +
                `<button class="btn btn-light btn-sm bm-btn ${t.bookmarked?'on':''}" id="bookmarkBtn" title="שמור לקריאה מאוחרת">${t.bookmarked?"★ שמור":"☆ שמור"}</button>`;
   if (canEditTitle) modHtml += `<button class="btn btn-light btn-sm" id="editTitleBtn">✎ ערוך כותרת</button>`;
+  // The topic's author may delete their OWN topic while it is still theirs alone — not locked,
+  // and no other member has replied yet. (Staff get the unconditional "מחק נושא" button below.)
+  const authorCanDelete = canPost() && me && me.id === t.user_id && !atLeast("moderator")
+    && !t.is_locked && !curPosts.some(p => p.user_id !== t.user_id);
+  if (authorCanDelete)
+    modHtml += `<button class="btn btn-danger btn-sm" id="delTopicBtn">🗑 מחק נושא</button>`;
   if (atLeast("admin"))
     modHtml += `<button class="btn btn-light btn-sm" id="pinBtn">${t.is_pinned?"בטל נעיצה":"📌 נעץ"}</button>`;
   if (atLeast("moderator"))
@@ -2972,6 +2978,7 @@ async function openTopic(id, opts){
     $("bookmarkBtn").onclick = () => toggleBookmark(id);
   }
   if (canEditTitle) $("editTitleBtn").onclick = () => editTitle(id, t.title);
+  if (authorCanDelete) $("delTopicBtn").onclick = () => authorDeleteTopic(id);
   if (atLeast("admin")) $("pinBtn").onclick = () => modPin(id, !t.is_pinned);
   if (atLeast("moderator")){
     $("moveCatBtn").onclick = () => moveCategory(id, t.category_id);
@@ -4123,7 +4130,7 @@ let mentionIdx = 0;            // highlighted row
 let mentionTimer = null;
 // Known display names for HIGHLIGHTING "@name" in rendered posts. Seeded from a thread's
 // participants (openTopic) and from autocomplete picks. Kept sorted longest-first so a
-// multi-word nickname ("@משה פורמן") highlights whole, not just its first word.
+// multi-word nickname ("@ישראל ישראלי") highlights whole, not just its first word.
 let mentionNames = [];
 function noteMentionNames(arr){
   let added = false;
@@ -4275,6 +4282,19 @@ async function modDeleteTopic(id){
   try{ await api(`/topics/${id}`, { method:"DELETE" }); flash("הנושא נמחק.","ok");
        history.replaceState(null, "", location.pathname + location.search); showList(); }
   catch(e){ flash(e.message, "err"); }
+}
+// A member deleting the topic THEY opened (only offered while it's still theirs alone). The
+// server re-checks; if someone replied in the meantime, translate its error to plain Hebrew.
+async function authorDeleteTopic(id){
+  if (!await confirmDialog("מחיקת הנושא", "למחוק את הנושא שפתחת? הפעולה אינה הפיכה.", "מחק נושא")) return;
+  try{ await api(`/topics/${id}`, { method:"DELETE" }); flash("הנושא נמחק.","ok");
+       history.replaceState(null, "", location.pathname + location.search); showList(); }
+  catch(e){
+    const msg = e.message === "has_replies" ? "כבר יש תגובות מחברים אחרים — פנה לצוות כדי למחוק."
+              : e.message === "locked" ? "הנושא נעול, ולכן אי אפשר למחוק אותו."
+              : e.message;
+    flash(msg, "err");
+  }
 }
 async function staffBlock(uid, name){
   if (!await confirmDialog("חסימת משתמש",
