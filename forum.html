@@ -378,6 +378,13 @@
   .like-pop-h{font-size:.7rem;font-weight:800;color:var(--muted);letter-spacing:.04em;padding:4px 7px 8px}
   .like-pop-row{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;font-weight:600;font-size:.93rem}
   .like-pop-row:hover{background:var(--parch)}
+  /* floating "quote the selection" bubble — pops over a text selection inside a post body */
+  .quote-pop{position:fixed;z-index:75;background:#fff;border:1px solid var(--line);border-radius:11px;
+    box-shadow:0 10px 28px rgba(34,41,58,.2);padding:4px}
+  .quote-pop.hidden{display:none}
+  .quote-pop button{font:inherit;font-size:.85rem;font-weight:700;color:var(--ink);cursor:pointer;
+    border:0;background:none;padding:6px 12px;border-radius:8px;white-space:nowrap}
+  .quote-pop button:hover{background:var(--parch)}
   /* @mention autocomplete dropdown (anchored under the compose box) */
   .mention-pop{position:fixed;z-index:70;background:#fff;border:1px solid var(--line);border-radius:11px;
     box-shadow:0 12px 34px rgba(34,41,58,.18);padding:5px;min-width:190px;max-width:300px;max-height:240px;overflow:auto}
@@ -1025,6 +1032,9 @@
 
 <!-- @mention autocomplete dropdown (positioned in JS under the active compose box) -->
 <div id="mentionPop" class="mention-pop hidden"></div>
+
+<!-- "quote the selection" bubble (positioned in JS over a selection inside a post body) -->
+<div id="quotePop" class="quote-pop hidden"><button type="button">❝ צטט קטע</button></div>
 
 <!-- emoji picker for reactions (posts + DM messages); positioned in JS next to its opener -->
 <div id="emojiPop" class="emoji-pop hidden">
@@ -3126,7 +3136,7 @@ function postHtml(o, byId){
     actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
   if (canReply){
     actions += `<button class="btn btn-light btn-sm" data-act="reply" data-id="${p.id}">↩ השב</button>`;
-    actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}">❝ ציטוט</button>`;
+    actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}" title="ציטוט התגובה — או סמן בה קטע כדי לצטט רק אותו">❝ ציטוט</button>`;
   }
   // "Reply privately" is a REPLY action, so it belongs next to השב/ציטוט — it used to sit 8th
   // of 11, buried after the moderation buttons, where nobody found it. A member may only DM
@@ -3184,6 +3194,7 @@ function postHtml(o, byId){
 }
 // Wire the data-act buttons + like-count hover for the rendered posts.
 function wirePostActions(){
+  clearQuoteSel();   // the posts just re-rendered — any tracked selection points at dead nodes
   $("posts").querySelectorAll("[data-act]").forEach(el => el.onclick = () => {
     const act = el.getAttribute("data-act");
     const id = parseInt(el.getAttribute("data-id"),10);
@@ -3265,24 +3276,37 @@ function clearReplyTo(){
 }
 // "Quote" a post: thread the reply under it AND prepend a "> "-quoted block of its text
 // to the reply box. renderBody turns consecutive "> " lines into a styled <blockquote>.
-function quotePost(id){
+// `sel` (from the selection bubble below, or the live selection when the ❝ ציטוט button
+// is pressed) narrows the quote to just that passage instead of the whole message.
+function quotePost(id, sel){
   const p = curPosts.find(x => x.id === id);
   if (!p) return;
+  sel = sel || (quoteSel && quoteSel.postId === id ? quoteSel : null);
   setReplyTo(id);                       // permission check + thread link + scroll/focus
   if (replyTo !== id) return;           // setReplyTo bailed (not allowed) — don't insert
-  // reduce the quoted post to plain text (drop images/code/markup), capped in length
-  let body = String(p.body || "");
-  if (body.startsWith(HTML_MARK)) body = body.slice(HTML_MARK.length).replace(/^\n/, "");
-  body = body
-    .replace(/```[\s\S]*?```/g, " [קוד] ")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " [תמונה] ")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  if (body.length > 500) body = body.slice(0, 500) + "…";
+  let body;
+  if (sel){
+    // a passage: already plain text (it came off the rendered body). "…" on either side
+    // signals to the reader that the quote was lifted out of a longer message.
+    body = sel.text;
+    if (body.length > 1000) body = body.slice(0, 1000).trim() + "…";
+    else if (!sel.atEnd) body += "…";
+    if (!sel.atStart) body = "…" + body;
+  } else {
+    // whole post: reduce it to plain text (drop images/code/markup), capped in length
+    body = String(p.body || "");
+    if (body.startsWith(HTML_MARK)) body = body.slice(HTML_MARK.length).replace(/^\n/, "");
+    body = body
+      .replace(/```[\s\S]*?```/g, " [קוד] ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " [תמונה] ")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/`([^`]*)`/g, "$1")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (body.length > 500) body = body.slice(0, 500) + "…";
+  }
   const quoted = (p.author + " כתב/ה:\n" + body)
     .split("\n").map(l => "> " + l).join("\n");
   const ta = $("replyBody");
@@ -3291,7 +3315,79 @@ function quotePost(id){
   ta.focus();
   ta.selectionStart = ta.selectionEnd = ta.value.length;   // caret after the quote
   saveReplyDraft();   // persist the quote immediately (a programmatic set fires no input event)
+  clearQuoteSel();    // the passage is spent — the next ❝ ציטוט quotes the whole post again
 }
+
+// ---- quote a passage: track a text selection inside a post body -------------
+// Selecting text in a post pops a small "❝ צטט קטע" bubble over the selection; the
+// ❝ ציטוט button honours the same live selection. The text comes off the RENDERED
+// body, so a bold/linked run is quoted as plain text — as in any other forum.
+let quoteSel = null;                       // { postId, text, atStart, atEnd } while live
+const normWs = s => String(s).replace(/\s+/g, " ").trim();
+// A mousedown/up on the bubble (or on a ❝ ציטוט button) is not "the user clicked away" —
+// that very click collapses the selection, and we must keep the passage we already read.
+function isQuoteTrigger(t){
+  return !!(t && t.closest && (t.closest("#quotePop") || t.closest('[data-act="quote"]')));
+}
+function readQuoteSelection(){
+  const s = window.getSelection();
+  if (!s || s.isCollapsed || !s.rangeCount) return null;
+  const r = s.getRangeAt(0);
+  const elOf = n => (n && n.nodeType === 1 ? n : n && n.parentElement);
+  const a = elOf(r.startContainer), b = elOf(r.endContainer);
+  const bodyEl = a && a.closest && a.closest(".post-body");
+  // must start AND end inside the same post body — a selection spilling across posts
+  // (or into the page chrome) has no single post to quote
+  if (!bodyEl || !b || !b.closest || b.closest(".post-body") !== bodyEl) return null;
+  const postEl = bodyEl.closest(".post");
+  const id = postEl ? parseInt(String(postEl.id).replace("post-", ""), 10) : NaN;
+  if (!id) return null;
+  const text = s.toString().replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (text.length < 2) return null;
+  // whitespace-insensitive edge test — only decides whether to add the "…" markers
+  const full = normWs(bodyEl.innerText || bodyEl.textContent || ""), n = normWs(text);
+  return { postId: id, text, atStart: full.startsWith(n), atEnd: full.endsWith(n) };
+}
+function showQuotePop(){
+  const pop = $("quotePop"), s = window.getSelection();
+  if (!quoteSel || !s || !s.rangeCount || s.isCollapsed) return hideQuotePop();
+  const r = s.getRangeAt(0).getBoundingClientRect();
+  if (!r || (!r.width && !r.height)) return hideQuotePop();
+  pop.classList.remove("hidden");                       // measure only once visible
+  let left = r.left + r.width / 2 - pop.offsetWidth / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - 8 - pop.offsetWidth));
+  let top = r.top - 8 - pop.offsetHeight;               // above the selection…
+  if (top < 8) top = r.bottom + 8;                      // …unless there's no room up there
+  pop.style.left = left + "px";
+  pop.style.top  = Math.max(8, Math.min(top, window.innerHeight - 8 - pop.offsetHeight)) + "px";
+}
+function hideQuotePop(){ $("quotePop").classList.add("hidden"); }
+function clearQuoteSel(){ quoteSel = null; hideQuotePop(); }
+function refreshQuoteSel(){
+  // same gate as the ❝ ציטוט button — don't offer a quote that setReplyTo would refuse
+  const allowed = canPost() && curTopic && (!curTopic.is_locked || atLeast("moderator"));
+  quoteSel = allowed ? readQuoteSelection() : null;
+  if (quoteSel) showQuotePop(); else hideQuotePop();
+}
+(function(){
+  const pop = $("quotePop");
+  pop.addEventListener("mousedown", (e) => e.preventDefault());   // keep the selection alive
+  pop.querySelector("button").onclick = () => {
+    const s = quoteSel;
+    if (s) quotePost(s.postId, s); else hideQuotePop();
+  };
+  document.addEventListener("mousedown", (e) => { if (!isQuoteTrigger(e.target)) hideQuotePop(); });
+  document.addEventListener("mouseup",   (e) => { if (!isQuoteTrigger(e.target)) setTimeout(refreshQuoteSel, 0); });
+  document.addEventListener("touchend",  (e) => { if (!isQuoteTrigger(e.target)) setTimeout(refreshQuoteSel, 80); });
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "Escape") return clearQuoteSel();
+    if (e.shiftKey || e.key === "a" || e.key === "A") setTimeout(refreshQuoteSel, 0);   // keyboard select
+  });
+  // the bubble is position:fixed — follow the selection while the page moves under it
+  const follow = () => { if (!pop.classList.contains("hidden")) showQuotePop(); };
+  window.addEventListener("scroll", follow, { passive:true });
+  window.addEventListener("resize", follow);
+})();
 // Styled popover listing who liked a post — instant (names come embedded as
 // p.liker_names, '||'-joined). position:fixed, clamped to the viewport, flips above
 // when there's no room below.
