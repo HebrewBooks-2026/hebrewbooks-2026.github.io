@@ -322,6 +322,9 @@
     border-radius:5px;padding:0 4px;white-space:nowrap}
   .post-body .quote{display:block;margin:.5em 0;padding:.5em .9em;border-inline-start:3px solid var(--gold);
     background:var(--parch);border-radius:0 8px 8px 0;color:var(--ink);opacity:.92;white-space:normal}
+  /* the quote header links back to the post it was taken from */
+  .post-body .quote-src{color:inherit;font-weight:700;text-decoration:none;border-bottom:1px dashed var(--gold)}
+  .post-body .quote-src:hover{color:var(--gold)}
   .post-body code,.code-inline{direction:ltr;unicode-bidi:embed;background:var(--parch2);color:#9a3b2f;
     padding:1px 6px;border-radius:6px;font-family:Consolas,Menlo,'Courier New',monospace;font-size:.9em}
   .post-body pre code{background:none;color:inherit;padding:0}
@@ -1442,7 +1445,15 @@ function renderBody(text){
   //    <blockquote> (used by the quote-reply button). Stashed like code so its inner
   //    newlines survive and it isn't re-processed by the steps below.
   h = h.replace(/(^|\n)((?:&gt;[^\n]*(?:\n|$))+)/g, (_, pre, block) => {
-    const inner = block.replace(/^&gt; ?/gm, "").replace(/\n+$/, "").replace(/\n/g, "<br>");
+    let inner = block.replace(/^&gt; ?/gm, "").replace(/\n+$/, "").replace(/\n/g, "<br>");
+    // A quote header may carry a back-link to the post it was lifted from:
+    // "[שם כתב/ה:](#topic=1&post=2)". It has to be expanded HERE — the whole blockquote is
+    // stashed before the generic link step runs — and it stays an in-page hash link (same
+    // tab, the SPA routes it) rather than a target=_blank URL. Both ids are strictly
+    // numeric, so nothing user-controlled reaches the href. (& is already &amp; — escaped.)
+    inner = inner.replace(/\[([^\]\n]+)\]\(#topic=(\d+)&amp;post=(\d+)\)/g,
+      (_m, label, tid, pid) => `<a class="quote-src" href="#topic=${tid}&amp;post=${pid}"` +
+        ` data-tid="${tid}" data-pid="${pid}" title="מעבר להודעה המקורית">${label}</a>`);
     return pre + "\x00C" + (codeStore.push(`<blockquote class="quote">${inner}</blockquote>`) - 1) + "\x00";
   });
   // 0.7) spoiler: [spoiler]…[/spoiler] → a collapsed <details> the reader clicks to reveal
@@ -3215,6 +3226,12 @@ function wirePostActions(){
   });
   $("posts").querySelectorAll(".user-link").forEach(el =>
     el.onclick = (e) => { e.stopPropagation(); openProfile(parseInt(el.dataset.uid,10)); });
+  // quote back-links: inside this topic jump+flash directly (a bare hash change does
+  // nothing when the URL already points at that post); other topics follow the href.
+  $("posts").querySelectorAll(".quote-src").forEach(el => el.onclick = (e) => {
+    if (parseInt(el.dataset.tid,10) !== curTopicId) return;
+    e.preventDefault(); jumpToPost(parseInt(el.dataset.pid,10));
+  });
   $("posts").querySelectorAll(".like-count").forEach(el => {
     el.onmouseenter = () => showLikePop(el);
     el.onmouseleave = hideLikePop;
@@ -3282,8 +3299,21 @@ function quotePost(id, sel){
   const p = curPosts.find(x => x.id === id);
   if (!p) return;
   sel = sel || (quoteSel && quoteSel.postId === id ? quoteSel : null);
-  setReplyTo(id);                       // permission check + thread link + scroll/focus
-  if (replyTo !== id) return;           // setReplyTo bailed (not allowed) — don't insert
+  if (!me) return openAuth();                                        // same gate as setReplyTo
+  if (!canPost()){ flash("רק חברים מאושרים יכולים להגיב.", "err"); return; }
+  const ta = $("replyBody");
+  // Quoting into a reply that's already being written STACKS another quote instead of
+  // starting over — that's how one answer can address several people.
+  const adding = !!ta.value.trim();
+  // Aim the thread only while it has no target: quoting a second person must not silently
+  // re-point a reply the user already aimed (each quote links to its own source anyway).
+  if (replyTo == null){
+    setReplyTo(id);                     // thread link + scroll/focus
+    if (replyTo !== id) return;         // setReplyTo bailed (not allowed) — don't insert
+  } else {
+    $("replyBox").scrollIntoView({ behavior:"smooth", block:"center" });
+    ta.focus();
+  }
   let body;
   if (sel){
     // a passage: already plain text (it came off the rendered body). "…" on either side
@@ -3307,15 +3337,39 @@ function quotePost(id, sel){
       .trim();
     if (body.length > 500) body = body.slice(0, 500) + "…";
   }
-  const quoted = (p.author + " כתב/ה:\n" + body)
-    .split("\n").map(l => "> " + l).join("\n");
-  const ta = $("replyBody");
-  setMode(ta, "text");
-  ta.value = quoted + "\n\n" + ta.value;
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = ta.value.length;   // caret after the quote
+  // the header doubles as a link back to the quoted post. []() would break on a display
+  // name containing brackets, so those are dropped from the label (cosmetic only).
+  const head = String(p.author).replace(/[\[\]()]/g, "") + " כתב/ה:";
+  let quoted;
+  if (ta.dataset.mode === "html"){
+    // Never flip a rich draft to plain text just because something was quoted into it —
+    // emit the quote as HTML the sanitizer keeps (bare <blockquote> is styled by .rich).
+    // The link must be a full URL here: safeLinkHref only passes http(s), so a "#topic="
+    // href would be stripped — the cost is that it opens in a new tab.
+    quoted = `<blockquote><a href="${postUrl(curTopicId, id)}">${esc(head)}</a><br>` +
+             esc(body).replace(/\n/g, "<br>") + `</blockquote>`;
+  } else {
+    quoted = (`[${head}](#topic=${curTopicId}&post=${id})\n` + body)
+      .split("\n").map(l => "> " + l).join("\n");
+  }
+  putQuote(ta, quoted, adding);
   saveReplyDraft();   // persist the quote immediately (a programmatic set fires no input event)
   clearQuoteSel();    // the passage is spent — the next ❝ ציטוט quotes the whole post again
+  if (adding) flash("הציטוט נוסף לתגובה.", "ok");   // no scroll cue when the box was already open
+}
+// Place a quote in the reply box: an extra quote goes at the END (so several stack in the
+// order they were picked), the first one at the top. NOT at the caret — selecting text in
+// a post drops the textarea's caret back to 0, which silently reversed the stack order.
+function putQuote(ta, quoted, append){
+  if (append){
+    const tail = /\n\n$/.test(ta.value) ? "" : /\n$/.test(ta.value) ? "\n" : "\n\n";
+    ta.value = ta.value + tail + quoted + "\n\n";
+  } else {
+    ta.value = quoted + "\n\n" + ta.value;
+  }
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ta.value.length;   // caret after the quote
+  updatePreview(ta);   // a programmatic set fires no input event — refresh the live preview
 }
 
 // ---- quote a passage: track a text selection inside a post body -------------
