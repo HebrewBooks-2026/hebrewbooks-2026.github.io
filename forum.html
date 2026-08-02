@@ -1037,7 +1037,7 @@
 <div id="mentionPop" class="mention-pop hidden"></div>
 
 <!-- "quote the selection" bubble (positioned in JS over a selection inside a post body) -->
-<div id="quotePop" class="quote-pop hidden"><button type="button">❝ צטט קטע</button></div>
+<div id="quotePop" class="quote-pop hidden"><button type="button" title="ציטוט הקטע המסומן (Ctrl+Shift+9)">❝ צטט קטע</button></div>
 
 <!-- emoji picker for reactions (posts + DM messages); positioned in JS next to its opener -->
 <div id="emojiPop" class="emoji-pop hidden">
@@ -3147,7 +3147,7 @@ function postHtml(o, byId){
     actions += `<span class="like-count" data-id="${p.id}" tabindex="0">${p.like_count}</span>`;
   if (canReply){
     actions += `<button class="btn btn-light btn-sm" data-act="reply" data-id="${p.id}">↩ השב</button>`;
-    actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}" title="ציטוט התגובה — או סמן בה קטע כדי לצטט רק אותו">❝ ציטוט</button>`;
+    actions += `<button class="btn btn-light btn-sm" data-act="quote" data-id="${p.id}" title="ציטוט התגובה — או סמן בה קטע כדי לצטט רק אותו (Ctrl+Shift+9)">❝ ציטוט</button>`;
   }
   // "Reply privately" is a REPLY action, so it belongs next to השב/ציטוט — it used to sit 8th
   // of 11, buried after the moderation buttons, where nobody found it. A member may only DM
@@ -3417,10 +3417,12 @@ function showQuotePop(){
 }
 function hideQuotePop(){ $("quotePop").classList.add("hidden"); }
 function clearQuoteSel(){ quoteSel = null; hideQuotePop(); }
+// same gate as the ❝ ציטוט button — don't offer a quote that setReplyTo would refuse
+function canQuoteNow(){
+  return canPost() && curTopic && (!curTopic.is_locked || atLeast("moderator"));
+}
 function refreshQuoteSel(){
-  // same gate as the ❝ ציטוט button — don't offer a quote that setReplyTo would refuse
-  const allowed = canPost() && curTopic && (!curTopic.is_locked || atLeast("moderator"));
-  quoteSel = allowed ? readQuoteSelection() : null;
+  quoteSel = canQuoteNow() ? readQuoteSelection() : null;
   if (quoteSel) showQuotePop(); else hideQuotePop();
 }
 (function(){
@@ -3436,6 +3438,20 @@ function refreshQuoteSel(){
   document.addEventListener("keyup", (e) => {
     if (e.key === "Escape") return clearQuoteSel();
     if (e.shiftKey || e.key === "a" || e.key === "A") setTimeout(refreshQuoteSel, 0);   // keyboard select
+  });
+  // Ctrl+Shift+9 quotes the marked passage — the SAME chord the compose toolbar uses for
+  // a blockquote, so "ציטוט" is one shortcut everywhere: inside a compose box it wraps the
+  // text, outside it quotes the selection. Keyed on the PHYSICAL e.code so it survives a
+  // Hebrew layout (see FMT_KEYS), and skipped inside inputs — there the compose box owns it.
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.code !== "Digit9") return;
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (!canQuoteNow()) return;
+    const s = readQuoteSelection() || quoteSel;   // read live; fall back to what was tracked
+    if (!s) return;
+    e.preventDefault();
+    quotePost(s.postId, s);
   });
   // the bubble is position:fixed — follow the selection while the page moves under it
   const follow = () => { if (!pop.classList.contains("hidden")) showQuotePop(); };
