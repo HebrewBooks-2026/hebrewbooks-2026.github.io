@@ -872,7 +872,7 @@
         <textarea class="in" id="replyBody" placeholder="כתוב תגובה..." required></textarea>
         <div class="compose-policy">⚠ בשליחה אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
         <div class="row-actions">
-          <button class="btn btn-gold" type="submit">שלח תגובה</button>
+          <button class="btn btn-gold" type="submit" id="replySubmit">שלח תגובה</button>
           <button class="btn btn-light" type="button" id="replyImgBtn">🖼 תמונה</button>
           <button class="btn btn-light file-attach-btn hidden" type="button" id="replyFileBtn">📎 קובץ</button>
           <button class="btn btn-light" type="button" id="replyLinkBtn">🔗 קישור</button>
@@ -904,7 +904,7 @@
         </div>
         <div class="compose-policy">⚠ בפרסום אני מאשר/ת שהתוכן קשור באופן ישיר לתוכנת "ארון הספרים הדיגיטלי" ולמאגרי הספרים המופצים עמה. תוכן שאינו קשור יגרור חסימה לצמיתות.</div>
         <div class="row-actions">
-          <button class="btn btn-gold" type="submit">פרסם נושא</button>
+          <button class="btn btn-gold" type="submit" id="newSubmit">פרסם נושא</button>
           <button class="btn btn-light" type="button" id="newDraftBtn" title="שמור בלי לפרסם — רק אתה תראה את זה">📝 שמור כטיוטה</button>
           <button class="btn btn-light" type="button" id="newImgBtn">🖼 תמונה</button>
           <button class="btn btn-light file-attach-btn hidden" type="button" id="newFileBtn">📎 קובץ</button>
@@ -3014,7 +3014,7 @@ async function openTopic(id, opts){
   const canReply = canPost() && (!t.is_locked || atLeast("moderator"));
   $("replyBox").classList.toggle("hidden", !canReply);
   $("lockedNote").classList.toggle("hidden", !(t.is_locked && !canReply));
-  if (canReply){ restoreReplyDraft(id); $("replyForm").onsubmit = (e) => { e.preventDefault(); submitReply(id); }; }
+  if (canReply){ restoreReplyDraft(id); $("replyForm").onsubmit = (e) => { e.preventDefault(); once("replySubmit", () => submitReply(id)); }; }
 
   // "Jump to the first reply you haven't read". The server hands back the read cursor as it
   // was BEFORE this visit (it advances it right after), so this is the one moment we can
@@ -3909,6 +3909,18 @@ async function openProfile(uid){
 function closeProfile(){ $("profileOverlay").classList.add("hidden"); }
 
 // ====== writes ======
+// Runs `fn` at most once at a time, keyed on its button. A publish/reply round trip is a
+// second or two, and in that window a double-click — or Ctrl+Enter on top of a click — used
+// to fire a SECOND identical POST, which the server dutifully inserted: that is where the
+// forum's duplicate posts came from. Disabling the button for the round trip closes it; the
+// worker's DUPE_WINDOW_SEC guard is the backstop for retries the page can't see.
+async function once(btnId, fn){
+  const btn = $(btnId);
+  if (btn && btn.disabled) return;   // already in flight
+  if (btn) btn.disabled = true;
+  try { return await fn(); }
+  finally { if (btn) btn.disabled = false; }
+}
 // draft=true saves it privately and notifies nobody; it can be published later.
 async function submitNewTopic(draft){
   try{
@@ -4695,8 +4707,8 @@ document.addEventListener("click", (e) => {   // click anywhere else closes an o
   if (!e.target.closest(".nav-menu")) closeNavMenus();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNavMenus(); });
-$("newTopicForm").onsubmit = (e) => { e.preventDefault(); submitNewTopic(false); };
-$("newDraftBtn").onclick = () => submitNewTopic(true);
+$("newTopicForm").onsubmit = (e) => { e.preventDefault(); once("newSubmit", () => submitNewTopic(false)); };
+$("newDraftBtn").onclick = () => once("newDraftBtn", () => submitNewTopic(true));
 $("publishDraftBtn").onclick = publishDraft;
 
 // topic sort selector (persisted)
@@ -4798,9 +4810,11 @@ function ctrlEnterSubmit(ta, fn){
     }
   });
 }
-ctrlEnterSubmit($("replyBody"), () => { if (curTopicId) submitReply(curTopicId); });
-ctrlEnterSubmit($("newBody"),  submitNewTopic);
-ctrlEnterSubmit($("editBody"), saveEdit);
+// …routed through once() for the same reason the click handlers are: Ctrl+Enter while a
+// click is still in flight is one of the ways the same reply got posted twice.
+ctrlEnterSubmit($("replyBody"), () => { if (curTopicId) once("replySubmit", () => submitReply(curTopicId)); });
+ctrlEnterSubmit($("newBody"),  () => once("newSubmit", () => submitNewTopic(false)));
+ctrlEnterSubmit($("editBody"), () => once("editSave", saveEdit));
 ctrlEnterSubmit($("dmBody"),      submitNewDm);
 ctrlEnterSubmit($("dmReplyBody"), sendDmMessage);
 
@@ -4919,7 +4933,7 @@ document.addEventListener("click", (e) => {   // dismiss the recipient dropdown 
     $("dmToPop").classList.add("hidden");
 });
 // edit-post modal
-$("editSave").onclick = saveEdit;
+$("editSave").onclick = () => once("editSave", saveEdit);
 $("editCancel").onclick = closeEdit;
 $("editOverlay").onclick = (e) => { if (e.target === $("editOverlay")) closeEdit(); };
 $("editImgBtn").onclick = () => $("editImgInput").click();
