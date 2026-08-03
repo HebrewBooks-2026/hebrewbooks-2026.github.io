@@ -681,6 +681,11 @@
   .s-msg{max-width:86%;padding:9px 12px;border-radius:13px;line-height:1.55;font-size:.92rem;word-break:break-word}
   .s-msg .s-who{font-size:.72rem;font-weight:800;opacity:.7;margin-bottom:3px}
   .s-msg .s-when{font-size:.7rem;color:var(--muted);margin-top:4px}
+  /* "ערוך" sits inline in the timestamp line — a link, not a button, so it stays quiet
+     until wanted and doesn't compete with the message itself. */
+  .s-msg .s-edit{background:none;border:0;padding:0;font:inherit;color:var(--muted);
+    cursor:pointer;text-decoration:underline}
+  .s-msg .s-edit:hover{color:var(--ink)}
   .s-user{align-self:flex-start;background:#eef2fb;border:1px solid #d6e0f5}
   .s-assistant{align-self:flex-end;background:#fbf7ec;border:1px solid var(--gold-soft)}
   .s-dev{align-self:flex-end;background:#e6f6ea;border:1px solid #b6e0c2}
@@ -2396,10 +2401,11 @@ async function openConversation(id){
 async function refreshConversation(id, silent){
   const data = await api("/dm/" + id);
   curConvo = data;
-  // The signature drives the silent 6s poll. It folds in the REACTIONS too, otherwise a
-  // reaction added by the other side would never repaint (the message id list is unchanged).
+  // The signature drives the silent 6s poll. It folds in the REACTIONS and the EDIT stamp
+  // too — otherwise a reaction or an edit made by the other side would never repaint (the
+  // message id list is unchanged by either).
   const sig = data.messages.map(m =>
-    m.id + ":" + (m.reactions||[]).map(r => r.emoji + r.count).join(",")).join("|");
+    m.id + "@" + (m.edited_at||0) + ":" + (m.reactions||[]).map(r => r.emoji + r.count).join(",")).join("|");
   if (silent && sig === dmSig) return;
   dmSig = sig;
   renderConvoChat(data);
@@ -2429,13 +2435,20 @@ function renderConvoChat(data){
   box.innerHTML = (data.messages||[]).map(m => {
     if (m.kind === "system") return `<div class="s-msg s-system">${renderBody(m.body)}<div class="s-when">${when(m.created_at)}</div></div>`;
     const mine = m.user_id === me.id;
+    // Only the author edits their own message — staff included (the server enforces it too).
+    // An admin's oversight view is read-only, hence the can_post gate as well.
+    const canEdit = mine && !!data.can_post;
+    const edited = m.edited_at ? ` · נערך ב־${when(m.edited_at)}` : "";
     return `<div class="s-msg ${mine?'s-me':'s-them'}">
       <div class="s-who">${mine?"אני":esc(m.author||"משתמש")}</div>
       <div>${renderBody(m.body)}</div>
-      <div class="s-when">${when(m.created_at)}</div>
+      <div class="s-when">${when(m.created_at)}${edited}${
+        canEdit ? ` · <button class="s-edit" data-dm-edit="${m.id}" title="ערוך את ההודעה">ערוך</button>` : ""}</div>
       ${renderReactions(m.reactions, "dm", m.id, !!data.can_post)}
     </div>`;
   }).join("");
+  box.querySelectorAll("[data-dm-edit]").forEach(el =>
+    el.onclick = () => openEdit(parseInt(el.dataset.dmEdit, 10), "dm"));
   box.scrollTop = box.scrollHeight;
 }
 // member=1, moderator=2, admin=3 — small client-side mirror for badge styling.
@@ -4391,11 +4404,16 @@ async function deletePost(id){
 }
 // Dedicated edit modal: pre-fills the RAW body (keeps ![](…) image markup intact) and
 // offers the same image button as compose, so images survive — and can be added — in edit.
-let editingId = null;
-function openEdit(id){
-  const post = curPosts.find(p => p.id === id);
+// kind: "post" (a forum reply) | "dm" (a private message). Same modal, same toolbar and
+// image button for both — only the lookup and the save endpoint differ.
+let editingId = null, editingKind = "post";
+function openEdit(id, kind){
+  editingKind = kind || "post";
+  const src = editingKind === "dm"
+    ? ((curConvo && curConvo.messages) || []).find(m => m.id === id)
+    : curPosts.find(p => p.id === id);
   editingId = id;
-  let body = post ? post.body : "";
+  let body = src ? src.body : "";
   if (body.startsWith(HTML_MARK)){ body = body.slice(HTML_MARK.length).replace(/^\n/, ""); setMode($("editBody"), "html"); }
   else setMode($("editBody"), "text");
   $("editBody").value = body;
@@ -4403,11 +4421,19 @@ function openEdit(id){
   $("editOverlay").classList.remove("hidden");
   $("editBody").focus();
 }
-function closeEdit(){ $("editOverlay").classList.add("hidden"); editingId = null; }
+function closeEdit(){ $("editOverlay").classList.add("hidden"); editingId = null; editingKind = "post"; }
 async function saveEdit(){
   if (!$("editBody").value.trim()) return flash("ההודעה ריקה.", "err");
   const body = composeBody($("editBody"));
-  try{ await api(`/posts/${editingId}`, { method:"PATCH", body:{ body }}); closeEdit(); openTopic(curTopicId); }
+  const dm = editingKind === "dm";
+  // capture before closeEdit() resets them — the refresh below is async
+  const id = editingId, convoId = dm && curConvo ? curConvo.conversation.id : null;
+  if (dm && !convoId) return flash("השיחה נסגרה.", "err");
+  try{
+    await api(dm ? `/dm/${convoId}/message/${id}` : `/posts/${id}`, { method:"PATCH", body:{ body }});
+    closeEdit();
+    if (dm) await refreshConversation(convoId); else openTopic(curTopicId);
+  }
   catch(e){ flash(e.message, "err"); }
 }
 
