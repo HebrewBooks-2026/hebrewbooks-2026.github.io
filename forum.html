@@ -438,6 +438,12 @@
   /* the shared openModal dialog (link/color/etc.) is often opened FROM another modal
      (e.g. the edit-post window) — keep it above all the fixed-purpose overlays */
   #modalOverlay{z-index:70}
+  /* Same story one level down: the edit window is now opened FROM the private-chat
+     overlay too. At the shared z-index:50 the winner is whichever comes LAST in the
+     DOM — #dmOverlay does — so editing a DM opened the box BEHIND the chat. Sits above
+     the fixed-purpose overlays, below #modalOverlay and the mention/emoji popups that
+     have to work inside it. */
+  #editOverlay{z-index:60}
   .modal{background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(21,35,63,.4);
     width:100%;max-width:460px;padding:24px;animation:pop .14s ease;
     /* never exceed the viewport — a tall body (e.g. a profile's posts) scrolls instead */
